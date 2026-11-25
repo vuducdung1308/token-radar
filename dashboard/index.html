@@ -18,9 +18,12 @@
   <div class="stats" id="stats"></div>
 </header>
 
+<section class="kpi" id="kpi" aria-label="Integrity checks"></section>
+
 <nav class="tabs">
   <button class="tab active" data-tab="board">Board</button>
   <button class="tab" data-tab="live">Live tokens</button>
+  <button class="tab" data-tab="excluded">Not candidates</button>
   <button class="tab" data-tab="model">How the model works</button>
 </nav>
 
@@ -28,14 +31,20 @@
   <section id="tab-board" class="panel">
     <div class="controls">
       <input id="q" type="search" placeholder="Search a protocol…" aria-label="Search a protocol">
+      <select id="status" aria-label="Filter by status">
+        <option value="">All rows</option>
+        <option value="pre-token" selected>Launch candidates</option>
+        <option value="live">Live tokens</option>
+      </select>
       <select id="cat" aria-label="Filter by category"><option value="">All categories</option></select>
       <select id="chain" aria-label="Filter by chain"><option value="">All chains</option></select>
       <label class="check"><input id="watch" type="checkbox"> Watchlist only</label>
       <select id="sort" aria-label="Sort the board">
-        <option value="implied">Sort: implied value</option>
+        <option value="implied">Sort: value</option>
         <option value="tvl">Sort: TVL</option>
         <option value="growth">Sort: 7-day growth</option>
         <option value="age">Sort: age</option>
+        <option value="odds">Sort: launch odds</option>
         <option value="name">Sort: name A–Z</option>
       </select>
     </div>
@@ -43,18 +52,18 @@
     <div class="tablewrap">
       <table id="board">
         <thead><tr>
-          <th>#</th><th>Protocol</th><th>Category</th><th>Chains</th>
-          <th class="num">TVL</th><th class="num">7d</th><th class="num">Age</th><th class="num">Implied value</th>
+          <th>#</th><th>Protocol</th><th>Status</th><th>Category</th><th>Chains</th>
+          <th class="num">TVL</th><th class="num">7d</th><th class="num">Age</th><th class="num">Odds</th><th class="num">Value</th>
         </tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="hint">Click any row for its model breakdown and farm plan.</p>
+    <p class="hint">Click any row for its model breakdown and farm plan. “Value” is the implied launch value for a candidate and the market cap for a token that already trades.</p>
     <article id="detail" class="detail" hidden></article>
   </section>
 
   <section id="tab-live" class="panel" hidden>
-    <p class="lede">These protocols already have a token that trades, so the board shows the market's own value for them — never a model's guess. They are the comparison set the category multiples are computed from.</p>
+    <p class="lede">These protocols already have a token that trades, so the board shows the market's own value for them — never a model's guess. They are the comparison set the category multiples are computed from. Protocols whose token trades but the snapshot carries no market cap for are listed last with no market cap.</p>
     <div class="tablewrap">
       <table>
         <thead><tr>
@@ -66,31 +75,52 @@
     </div>
   </section>
 
+  <section id="tab-excluded" class="panel" hidden>
+    <p class="lede">Pre-token protocols that are not launch candidates, with the reason each one is out. The radar keeps them listed so the universe is complete — a verdict, not a silent omission.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th>Protocol</th><th>Category</th><th class="num">TVL</th><th>Why not a candidate</th>
+        </tr></thead>
+        <tbody id="excludedRows"></tbody>
+      </table>
+    </div>
+  </section>
+
   <section id="tab-model" class="panel" hidden>
     <h2>How the model works</h2>
     <p class="lede">One formula scores every protocol. Nothing is hardcoded by name: the category multiples are computed from this snapshot's own live-token protocols at run time.</p>
     <div class="formula">
       <code>implied = TVL × category multiple × growth × maturity × chains</code>
       <ul>
-        <li><b>Category multiple</b> — the median market-cap-to-TVL ratio of live-token protocols in the same category (at least 5 of them), otherwise the overall median. Clamped to 0.05–0.60.</li>
+        <li><b>Category multiple</b> — the median market-cap-to-TVL ratio of live-token protocols in the same category (at least 5 of them), otherwise the overall median. Not clamped: the held-out test below showed clamping the multiples hurts.</li>
         <li><b>Growth</b> — 1 + clamp(7-day TVL change, −60%, +120%) × 0.6.</li>
         <li><b>Maturity</b> — 0.6 + min(age, 1095 days) / 1095 × 0.4. Older with no token yet counts for more; unknown age counts as 365 days.</li>
         <li><b>Chains</b> — 1 + 0.01 per extra chain, up to 10 chains.</li>
+        <li><b>Uncertainty range</b> — the same formula with the category's 25th and 75th percentile multiples instead of the median. The range is wide because market-cap-to-TVL varies a lot inside a category; the dashboard shows it on every row's detail view.</li>
+        <li><b>Launch odds</b> — the share of protocols in the same category that already have a token, smoothed, discounted by age. A base rate from the peers' record, not a prediction of whether or when a token is issued.</li>
       </ul>
     </div>
+    <h3>Held-out test — the model is tested, not just asserted</h3>
+    <p class="lede">The live protocols are split in two deterministic ways and the full model is fitted on one half and asked to predict the other half's market caps. The numbers are the median miss on the half the model never saw.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Split</th><th class="num">Train</th><th class="num">Test</th><th class="num">Median |log error|</th><th class="num">Median miss</th></tr></thead>
+      <tbody id="heldRows"></tbody>
+    </table></div>
+    <p class="lede">The miss is large — around 90% at the median — because market-cap-to-TVL varies by more than a hundredfold inside a single category, so no multiple of TVL can price a live token closely. The category multiples still beat one flat multiple on one split (127% → 99% median miss). Growth, maturity and chains are kept because the radar's job is ranking launch candidates, not pricing live tokens: a growing, young protocol is a better candidate even though growth does not predict a live token's market cap.</p>
     <h3>Category multiples, computed from this snapshot</h3>
     <div class="tablewrap"><table>
-      <thead><tr><th>Category</th><th class="num">Multiple</th></tr></thead>
+      <thead><tr><th>Category</th><th class="num">Multiple</th><th class="num">25th pct</th><th class="num">75th pct</th><th class="num">Live protocols</th></tr></thead>
       <tbody id="multRows"></tbody>
     </table></div>
     <h3>What “pre-token” means</h3>
     <p class="lede">A protocol is listed as pre-token when its DefiLlama record carries no market cap, no CoinGecko id and no symbol. That is what the record says — never proof it has no token. A protocol on the list may still have a token its record does not carry. The board never predicts whether or when a token is issued; the implied value is this entry's own claim about what a launch would be worth if the protocol's record stayed as it is.</p>
-    <p class="lede">The board also leaves out wrapped, staked and bridged products of tokens that already trade — the same exclusion the snapshot's own watchlist rule uses (Bridge, Liquid Staking and related categories, names starting with an exchange's name, names carrying “wrapped”, “staked” or “staking”, and versioned pools such as “V2”). A launch candidate has to be a protocol of its own, not a wrapper around someone else's token.</p>
+    <p class="lede">The board also leaves out wrapped, staked and bridged products of tokens that already trade — the same exclusion the snapshot's own watchlist rule uses (Bridge, Liquid Staking and related categories, names starting with an exchange's name, names carrying “wrapped”, “staked” or “staking”, and versioned pools such as “V2”). A launch candidate has to be a protocol of its own, not a wrapper around someone else's token. Those rows are listed on the Not candidates tab with the reason.</p>
   </section>
 </main>
 
 <footer>
-  <p>Snapshot: DefiLlama public API, fetched <span id="asof"></span> · <span id="src"></span> · Watchlist floor $50,000,000 TVL · Model radar-2</p>
+  <p>Snapshot: DefiLlama public API, fetched <span id="asof"></span> · <span id="src"></span> · Watchlist floor $50,000,000 TVL · Model radar-3</p>
   <p class="warn">Not financial advice. Farming a protocol costs gas and locks capital; a token may never launch, and an airdrop may never come.</p>
 </footer>
 
