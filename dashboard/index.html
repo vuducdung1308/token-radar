@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Radar — pre-token protocols ranked by implied launch value</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <div class="logo">◉</div>
+    <div>
+      <h1>TOKEN RADAR</h1>
+      <p class="sub">Which DeFi protocols without a token yet would be worth the most if they launched one — and how to farm them.</p>
+    </div>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="board">Board</button>
+  <button class="tab" data-tab="live">Live tokens</button>
+  <button class="tab" data-tab="model">How the model works</button>
+</nav>
+
+<main>
+  <section id="tab-board" class="panel">
+    <div class="controls">
+      <input id="q" type="search" placeholder="Search a protocol…" aria-label="Search a protocol">
+      <select id="cat" aria-label="Filter by category"><option value="">All categories</option></select>
+      <select id="chain" aria-label="Filter by chain"><option value="">All chains</option></select>
+      <label class="check"><input id="watch" type="checkbox"> Watchlist only</label>
+      <select id="sort" aria-label="Sort the board">
+        <option value="implied">Sort: implied value</option>
+        <option value="tvl">Sort: TVL</option>
+        <option value="growth">Sort: 7-day growth</option>
+        <option value="age">Sort: age</option>
+        <option value="name">Sort: name A–Z</option>
+      </select>
+    </div>
+    <p class="count" id="count"></p>
+    <div class="tablewrap">
+      <table id="board">
+        <thead><tr>
+          <th>#</th><th>Protocol</th><th>Category</th><th>Chains</th>
+          <th class="num">TVL</th><th class="num">7d</th><th class="num">Age</th><th class="num">Implied value</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="hint">Click any row for its model breakdown and farm plan.</p>
+    <article id="detail" class="detail" hidden></article>
+  </section>
+
+  <section id="tab-live" class="panel" hidden>
+    <p class="lede">These protocols already have a token that trades, so the board shows the market's own value for them — never a model's guess. They are the comparison set the category multiples are computed from.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th>Protocol</th><th>Category</th><th>Chains</th>
+          <th class="num">TVL</th><th class="num">Market cap</th><th class="num">mcap / TVL</th><th class="num">7d</th>
+        </tr></thead>
+        <tbody id="liveRows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="tab-model" class="panel" hidden>
+    <h2>How the model works</h2>
+    <p class="lede">One formula scores every protocol. Nothing is hardcoded by name: the category multiples are computed from this snapshot's own live-token protocols at run time.</p>
+    <div class="formula">
+      <code>implied = TVL × category multiple × growth × maturity × chains</code>
+      <ul>
+        <li><b>Category multiple</b> — the median market-cap-to-TVL ratio of live-token protocols in the same category (at least 5 of them), otherwise the overall median. Clamped to 0.05–0.60.</li>
+        <li><b>Growth</b> — 1 + clamp(7-day TVL change, −60%, +120%) × 0.6.</li>
+        <li><b>Maturity</b> — 0.6 + min(age, 1095 days) / 1095 × 0.4. Older with no token yet counts for more; unknown age counts as 365 days.</li>
+        <li><b>Chains</b> — 1 + 0.01 per extra chain, up to 10 chains.</li>
+      </ul>
+    </div>
+    <h3>Category multiples, computed from this snapshot</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Category</th><th class="num">Multiple</th></tr></thead>
+      <tbody id="multRows"></tbody>
+    </table></div>
+    <h3>What “pre-token” means</h3>
+    <p class="lede">A protocol is listed as pre-token when its DefiLlama record carries no market cap, no CoinGecko id and no symbol. That is what the record says — never proof it has no token. A protocol on the list may still have a token its record does not carry. The board never predicts whether or when a token is issued; the implied value is this entry's own claim about what a launch would be worth if the protocol's record stayed as it is.</p>
+    <p class="lede">The board also leaves out wrapped, staked and bridged products of tokens that already trade — the same exclusion the snapshot's own watchlist rule uses (Bridge, Liquid Staking and related categories, names starting with an exchange's name, names carrying “wrapped”, “staked” or “staking”, and versioned pools such as “V2”). A launch candidate has to be a protocol of its own, not a wrapper around someone else's token.</p>
+  </section>
+</main>
+
+<footer>
+  <p>Snapshot: DefiLlama public API, fetched <span id="asof"></span> · <span id="src"></span> · Watchlist floor $50,000,000 TVL · Model radar-2</p>
+  <p class="warn">Not financial advice. Farming a protocol costs gas and locks capital; a token may never launch, and an airdrop may never come.</p>
+</footer>
+
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
