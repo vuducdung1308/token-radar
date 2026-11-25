@@ -45,6 +45,17 @@ h1 { margin: 0; font-size: 30px; letter-spacing: 2px; color: var(--gold); }
 }
 .stat b { display: block; font-size: 20px; color: var(--gold); font-variant-numeric: tabular-nums; }
 .stat span { font-size: 12px; color: var(--muted); }
+.kpi {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding: 12px 28px; border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.kpi-item {
+  font-size: 13px; color: var(--text);
+  background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 20px; padding: 5px 12px;
+}
+.kpi-item:first-child { color: var(--gold); }
 .tabs { display: flex; gap: 4px; padding: 0 28px; border-bottom: 1px solid var(--line); }
 .tab {
   background: none; border: none; border-bottom: 3px solid transparent;
@@ -69,7 +80,7 @@ main { padding: 20px 28px 28px; max-width: 1180px; }
 .count { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
 .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
 table { width: 100%; border-collapse: collapse; background: var(--panel); }
-th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
 thead th {
   background: var(--panel2); color: var(--muted);
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px;
@@ -85,6 +96,14 @@ td .slug { display: block; font-size: 12px; color: var(--muted); }
   display: inline-block; padding: 2px 8px; border-radius: 20px;
   background: #1d2c4e; color: var(--cyan); font-size: 12px;
 }
+.status {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 12px; font-weight: 650; white-space: nowrap;
+}
+.status-cand { background: #3a2f00; color: var(--gold); }
+.status-live { background: #0e2f3d; color: var(--cyan); }
+.tag { font-size: 11px; color: var(--muted); font-weight: 400; }
+.reason { white-space: normal; color: var(--muted); font-size: 13px; min-width: 280px; }
 .up { color: var(--green); }
 .down { color: var(--red); }
 .gold { color: var(--gold); font-weight: 700; }
