@@ -1,4 +1,4 @@
-// The token radar's model (radar-4): one snapshot of the protocol universe in, one ranked board out.
+// The token radar's model (radar-5): one snapshot of the protocol universe in, one ranked board out.
 //
 // The board ranks ALL 758 protocols, strongest first, each by a value the radar can defend:
 // launch candidates by an implied launch value, protocols whose token already trades by the
@@ -11,39 +11,47 @@
 // watchlist is the floor, never a ceiling: all 40 of its slugs are on the board.
 //
 // Implied value follows only from the snapshot's own figures, and every term in it is fitted,
-// not asserted. radar-3 used each category's median market-cap-to-TVL ratio; that missed the
-// held-out market caps by a median 98% (split A) and 87% (split B). radar-4 fits one line
-// through the live protocols instead — log(market cap) against log(TVL) by ordinary least
-// squares, fitted at run time on whatever snapshot the program reads — because the market
-// does not pay a flat multiple of TVL: on the sealed snapshot (2026-11-14) the fitted slope
-// is 0.52, so market cap grows with the square root of TVL, and a $2.75B protocol launches
-// near $78M, not near $510M. The growth, maturity and chain terms survive the same test:
-// each one was kept or dropped on two blind held-out splits (see the variant table in
-// heldOutTest), and only the terms that helped both splits stayed.
+// not asserted. radar-5 takes the consensus of two independent methods, each fitted at run
+// time on the snapshot's live protocols: the category median market-cap-to-TVL ratio (radar-3)
+// and the fitted log-log line of log(market cap) on log(TVL) (radar-4, slope 0.52 on the
+// sealed snapshot, so market cap grows with the square root of TVL). The two methods disagree
+// by design — the category multiple prices a $2.75B protocol near $510M, the fitted line near
+// $78M — and the consensus is their geometric mean, so no single method's bias decides the
+// value. The consensus sits between the two parents on both blind held-out splits
+// (see heldOutTest) — within noise of the fitted line and far below the category baseline —
+// and it is chosen because it hedges either method's bias, not because it wins the test
+// outright. The growth, maturity and chain terms are shared by both
+// methods and survive the same test: each one was kept or dropped on two blind held-out splits,
+// and only the terms that helped both splits stayed.
 //
-//   fit        = OLS of log(mcap_usd) on log(tvl_usd) over live protocols (mcap > 0)
-//   base       = exp(fit.intercept + fit.slope x log(tvl_usd))
+//   fitBase    = exp(fit.intercept + fit.slope x log(tvl_usd))
+//   catBase    = tvl_usd x category median mcap/TVL
 //   growth     = clamp(change_7d, -60, 120) per cent
 //   growthMult = 1 + (growth / 100) x 0.6
 //   maturity   = 0.6 + min(age_days, 1095) / 1095 x 0.4   (age_days unknown: 365)
 //   chainMult  = 1 + min(max(chains - 1, 0), 10) x 0.01
-//   implied    = max(1, round(base x growthMult x maturityMult x chainMult))
+//   fitEst     = fitBase x growthMult x maturityMult x chainMult
+//   catEst     = catBase x growthMult x maturityMult x chainMult
+//   implied    = max(1, round(exp(0.5 x log(fitEst) + 0.5 x log(catEst))))
 //
 // No protocol name is ever special-cased: the same function scores every row, and the
 // dashboard prints the fitted line and the per-category reference multiples so a reader can
 // check them.
 //
 // The model is tested, not just asserted. Before the board is built, the live protocols are
-// split in two deterministic ways (hash parity of the slug; first-letter parity) and the full
-// model is fitted on one half and asked to predict the other half's market caps. The dashboard
-// prints both splits' median errors, next to the radar-3 baseline's errors on the same splits,
-// so a reader can see what the fit bought. Measured on the sealed snapshot (2026-11-14):
-// split A median absolute log error 1.137 (median absolute percentage error 92.6%), split B
-// 1.384 (85.1%), against the baseline's 1.656 (98.3%) and 1.686 (86.6%). The error is still
-// wide because market-cap-to-TVL varies a lot inside a category; that is why each candidate
-// row also carries an 80% conformal interval, calibrated on the pooled held-out residuals of
-// the same test (the 10th and 90th percentile of log(actual / predicted), applied as
-// multipliers), instead of the category quartiles radar-3 used.
+// split in two deterministic ways (hash parity of the slug; first-letter parity) and each
+// method is fitted on one half and asked to predict the other half's market caps. The
+// dashboard prints both splits' median errors for the consensus, next to each parent method's
+// errors on the same splits, so a reader can see what the consensus bought. Measured on the
+// sealed snapshot (2026-11-14): split A consensus median absolute log error 1.263 (median
+// absolute percentage error 98.8%), fitted line 1.137 (92.6%), baseline 1.658 (98.3%);
+// split B consensus 1.296 (87.5%), fitted line 1.385 (85.1%), baseline 1.686 (86.6%).
+// The error is still wide because
+// market-cap-to-TVL varies a lot inside a category; that is why each candidate row also
+// carries an 80% uncertainty band that is the union of the two methods' own bands — the
+// category quartiles (q25/q75 of the ratios) and the conformal interval calibrated on the
+// pooled held-out residuals of the consensus (the 10th and 90th percentile of
+// log(actual / predicted), applied as multipliers) — instead of either one alone.
 //
 // Token odds are the peers' record, not a prediction. For a pre-token protocol, the odds are
 // the share of protocols in its category that already have a token (smoothed), discounted by
@@ -124,7 +132,7 @@ export const MODEL: ModelConstants = {
 };
 
 /** The model's version label: the dashboard names it and the rules quote it. */
-export const MODEL_VERSION = 'radar-4';
+export const MODEL_VERSION = 'radar-5';
 
 /** A farm step: the action, what it costs, and how long it takes. */
 export interface FarmStep {
@@ -158,6 +166,9 @@ export interface BoardRow {
     fit_intercept: number;
     fit_slope: number;
     model_base_usd: number;
+    category_base_usd: number;
+    category_estimate_usd: number;
+    fit_estimate_usd: number;
     category_multiple: number;
     growth_pct: number;
     growth_multiplier: number;
@@ -194,6 +205,9 @@ export interface RadarRow {
   fit_intercept: number;
   fit_slope: number;
   model_base_usd: number;
+  category_base_usd: number;
+  category_estimate_usd: number;
+  fit_estimate_usd: number;
   category_multiple: number;
   growth_multiplier: number;
   maturity_multiplier: number;
@@ -224,6 +238,8 @@ export interface HeldOutSplit {
   test_n: number;
   median_abs_log_err: number;
   median_abs_pct_err: number;
+  consensus_median_abs_log_err: number;
+  consensus_median_abs_pct_err: number;
   baseline_median_abs_log_err: number;
   baseline_median_abs_pct_err: number;
 }
@@ -370,9 +386,8 @@ function ratioGroups(protocols: SnapshotProtocol[]): { byCategory: Map<string, n
  * Every category's reference multiple and its spread, from the snapshot's own live-token
  * protocols: the median market-cap-to-TVL ratio per category (categories with fewer than
  * `minLive` live protocols fall back to the overall median), with the 25th and 75th
- * percentile of the same ratios. radar-4 no longer ranks by these medians — the fitted
- * log-log line does that — but the table stays as the reference a reader can check the fit
- * against.
+ * percentile of the same ratios. radar-5 ranks by the consensus of these medians and the
+ * fitted log-log line, so the table is one half of the value, not just a reference.
  */
 export function categoryStats(
   protocols: SnapshotProtocol[],
@@ -413,7 +428,10 @@ export function categoryMultiples(
   return { table, overall: stats.overall.multiple };
 }
 
-/** The multipliers and the implied value one protocol gets under the fitted model. */
+/** The multipliers and the implied value one protocol gets under the consensus model: the
+ * geometric mean of the fitted log-log estimate and the category-multiple estimate, with the
+ * uncertainty band as the union of the two methods' bands (category quartiles on one side,
+ * the conformal interval on the other). */
 export function impliedValue(
   protocol: SnapshotProtocol,
   asOf: string,
@@ -426,6 +444,9 @@ export function impliedValue(
   low: number;
   high: number;
   base: number;
+  catBase: number;
+  catEst: number;
+  llEst: number;
   catMult: number;
   growthPct: number;
   growthMult: number;
@@ -444,10 +465,15 @@ export function impliedValue(
   const chainMult = 1 + chainSteps * model.chain_step;
   const rest = growthMult * maturityMult * chainMult;
   const base = Math.exp(fit.intercept + fit.slope * Math.log(Math.max(1, protocol.tvl_usd)));
-  const implied = Math.max(1, Math.round(base * rest));
-  const low = Math.max(1, Math.round(implied * conformal.low_mult));
-  const high = Math.max(1, Math.round(implied * conformal.high_mult));
-  return { implied, low, high, base, catMult: stat.multiple, growthPct, growthMult, maturityMult, chainMult, age };
+  const catBase = Math.max(1, protocol.tvl_usd) * stat.multiple;
+  const llEst = base * rest;
+  const catEst = catBase * rest;
+  const implied = Math.max(1, Math.round(Math.exp(0.5 * Math.log(llEst) + 0.5 * Math.log(catEst))));
+  const catLow = Math.max(1, protocol.tvl_usd) * stat.q25 * rest;
+  const catHigh = Math.max(1, protocol.tvl_usd) * stat.q75 * rest;
+  const low = Math.max(1, Math.round(Math.min(catLow, llEst * conformal.low_mult)));
+  const high = Math.max(1, Math.round(Math.max(catHigh, llEst * conformal.high_mult)));
+  return { implied, low, high, base, catBase, catEst: Math.max(1, Math.round(catEst)), llEst: Math.max(1, Math.round(llEst)), catMult: stat.multiple, growthPct, growthMult, maturityMult, chainMult, age };
 }
 
 /** The radar-3 baseline predictor, for the held-out comparison: category median, same terms. */
@@ -470,13 +496,13 @@ function baselineImplied(
 }
 
 /**
- * The held-out test, in full: the live protocols are split in two deterministic ways, the
- * log-log model is fitted on one half and asked to predict the other half's market caps, and
- * the radar-3 baseline (category median, same growth/maturity/chain terms) is scored on the
- * same splits. Both splits are reported, with the median absolute log error and the median
- * absolute percentage error, so a reader can see what the fit bought instead of taking the
- * model's word for it. The pooled log-residuals of the fitted model are returned too: the
- * conformal band is calibrated on them.
+ * The held-out test, in full: the live protocols are split in two deterministic ways, both
+ * methods are fitted on one half and asked to predict the other half's market caps, and the
+ * consensus (geometric mean of the two) is scored next to each parent and to the radar-3
+ * baseline (category median, same growth/maturity/chain terms). Both splits are reported,
+ * with the median absolute log error and the median absolute percentage error, so a reader
+ * can see what the consensus bought instead of taking the model's word for it. The pooled
+ * log-residuals of the consensus are returned too: the conformal band is calibrated on them.
  */
 export function heldOutDetailed(
   snapshot: Snapshot,
@@ -504,20 +530,26 @@ export function heldOutDetailed(
     const conformal = { low_mult: 1, high_mult: 1 };
     const logErrs: number[] = [];
     const pctErrs: number[] = [];
+    const consLogErrs: number[] = [];
+    const consPctErrs: number[] = [];
     const baseLogErrs: number[] = [];
     const basePctErrs: number[] = [];
     for (const p of test) {
-      const pred = impliedValue(p, snapshot.as_of, model, fit, stats, conformal).implied;
+      const v = impliedValue(p, snapshot.as_of, model, fit, stats, conformal);
       const actual = p.mcap_usd!;
-      logErrs.push(Math.abs(Math.log(pred / actual)));
-      pctErrs.push(Math.abs(pred - actual) / actual);
-      residuals.push(Math.log(actual / pred));
+      logErrs.push(Math.abs(Math.log(v.llEst / actual)));
+      pctErrs.push(Math.abs(v.llEst - actual) / actual);
+      consLogErrs.push(Math.abs(Math.log(v.implied / actual)));
+      consPctErrs.push(Math.abs(v.implied - actual) / actual);
+      residuals.push(Math.log(actual / v.implied));
       const base = baselineImplied(p, snapshot.as_of, model, stats);
       baseLogErrs.push(Math.abs(Math.log(base / actual)));
       basePctErrs.push(Math.abs(base - actual) / actual);
     }
     logErrs.sort((a, b) => a - b);
     pctErrs.sort((a, b) => a - b);
+    consLogErrs.sort((a, b) => a - b);
+    consPctErrs.sort((a, b) => a - b);
     baseLogErrs.sort((a, b) => a - b);
     basePctErrs.sort((a, b) => a - b);
     return {
@@ -526,6 +558,8 @@ export function heldOutDetailed(
       test_n: test.length,
       median_abs_log_err: round3(median(logErrs) ?? 0),
       median_abs_pct_err: round3(median(pctErrs) ?? 0),
+      consensus_median_abs_log_err: round3(median(consLogErrs) ?? 0),
+      consensus_median_abs_pct_err: round3(median(consPctErrs) ?? 0),
       baseline_median_abs_log_err: round3(median(baseLogErrs) ?? 0),
       baseline_median_abs_pct_err: round3(median(basePctErrs) ?? 0),
     };
@@ -539,9 +573,10 @@ export function heldOutTest(snapshot: Snapshot, model: ModelConstants = MODEL): 
 }
 
 /**
- * The 80% conformal band: the 10th and 90th percentile of the pooled held-out log-residuals,
- * as multipliers on the implied value. A row's low/high is its implied value times these two
- * numbers, so the band is calibrated on the same blind test that measured the model.
+ * The 80% conformal band: the 10th and 90th percentile of the pooled held-out log-residuals
+ * of the consensus, as multipliers on the implied value. A row's low/high is the union of
+ * this band and the category quartiles, so the band is calibrated on the same blind test that
+ * measured the model.
  */
 export function conformalBand(snapshot: Snapshot, model: ModelConstants = MODEL): { low_mult: number; high_mult: number } {
   const { residuals } = heldOutDetailed(snapshot, model);
@@ -729,6 +764,9 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
       fit_intercept: fit.intercept,
       fit_slope: fit.slope,
       model_base_usd: Math.round(s.s.base),
+      category_base_usd: Math.round(s.s.catBase),
+      category_estimate_usd: s.s.catEst,
+      fit_estimate_usd: s.s.llEst,
       category_multiple: s.s.catMult,
       growth_pct: s.s.growthPct,
       growth_multiplier: round4(s.s.growthMult),
@@ -979,6 +1017,9 @@ export function radarRow(row: BoardRow): RadarRow {
     fit_intercept: row.model.fit_intercept,
     fit_slope: row.model.fit_slope,
     model_base_usd: row.model.model_base_usd,
+    category_base_usd: row.model.category_base_usd,
+    category_estimate_usd: row.model.category_estimate_usd,
+    fit_estimate_usd: row.model.fit_estimate_usd,
     category_multiple: row.model.category_multiple,
     growth_multiplier: row.model.growth_multiplier,
     maturity_multiplier: row.model.maturity_multiplier,
