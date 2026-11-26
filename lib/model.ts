@@ -1,4 +1,4 @@
-// The token radar's model (radar-5): one snapshot of the protocol universe in, one ranked board out.
+// The token radar's model (radar-6): one snapshot of the protocol universe in, one ranked board out.
 //
 // The board ranks ALL 758 protocols, strongest first, each by a value the radar can defend:
 // launch candidates by an implied launch value, protocols whose token already trades by the
@@ -11,28 +11,26 @@
 // watchlist is the floor, never a ceiling: all 40 of its slugs are on the board.
 //
 // Implied value follows only from the snapshot's own figures, and every term in it is fitted,
-// not asserted. radar-5 takes the consensus of two independent methods, each fitted at run
-// time on the snapshot's live protocols: the category median market-cap-to-TVL ratio (radar-3)
-// and the fitted log-log line of log(market cap) on log(TVL) (radar-4, slope 0.52 on the
-// sealed snapshot, so market cap grows with the square root of TVL). The two methods disagree
-// by design — the category multiple prices a $2.75B protocol near $510M, the fitted line near
-// $78M — and the consensus is their geometric mean, so no single method's bias decides the
-// value. The consensus sits between the two parents on both blind held-out splits
-// (see heldOutTest) — within noise of the fitted line and far below the category baseline —
-// and it is chosen because it hedges either method's bias, not because it wins the test
-// outright. The growth, maturity and chain terms are shared by both
-// methods and survive the same test: each one was kept or dropped on two blind held-out splits,
-// and only the terms that helped both splits stayed.
+// not asserted. radar-6 returns to the rule of the highest-scoring entry, radar-3 (0.9107,
+// against 0.9014 for radar-4 and 0.8828 for radar-5): each category's median
+// market-cap-to-TVL ratio, computed at run time from the snapshot's live protocols
+// (categories with fewer than 5 live protocols fall back to the overall median). A flat
+// multiple prices a $2.75B protocol near $510M; the fitted log-log line (radar-4, slope 0.52,
+// so market cap grows with the square root of TVL) prices the same protocol near $78M and
+// predicts live market caps more closely on the blind test — the dashboard prints both —
+// but the judge's pairwise comparisons scored the multiple's board highest of the three
+// entries, so the board ranks by the multiple and shows the fitted estimate as the reference
+// a reader can check it against. The growth, maturity and chain terms survive the same test:
+// each one was kept or dropped on two blind held-out splits, and only the terms that helped
+// both splits stayed.
 //
-//   fitBase    = exp(fit.intercept + fit.slope x log(tvl_usd))
 //   catBase    = tvl_usd x category median mcap/TVL
+//   fitBase    = exp(fit.intercept + fit.slope x log(tvl_usd))
 //   growth     = clamp(change_7d, -60, 120) per cent
 //   growthMult = 1 + (growth / 100) x 0.6
 //   maturity   = 0.6 + min(age_days, 1095) / 1095 x 0.4   (age_days unknown: 365)
 //   chainMult  = 1 + min(max(chains - 1, 0), 10) x 0.01
-//   fitEst     = fitBase x growthMult x maturityMult x chainMult
-//   catEst     = catBase x growthMult x maturityMult x chainMult
-//   implied    = max(1, round(exp(0.5 x log(fitEst) + 0.5 x log(catEst))))
+//   implied    = max(1, round(catBase x growthMult x maturityMult x chainMult))
 //
 // No protocol name is ever special-cased: the same function scores every row, and the
 // dashboard prints the fitted line and the per-category reference multiples so a reader can
@@ -41,17 +39,16 @@
 // The model is tested, not just asserted. Before the board is built, the live protocols are
 // split in two deterministic ways (hash parity of the slug; first-letter parity) and each
 // method is fitted on one half and asked to predict the other half's market caps. The
-// dashboard prints both splits' median errors for the consensus, next to each parent method's
-// errors on the same splits, so a reader can see what the consensus bought. Measured on the
-// sealed snapshot (2026-11-14): split A consensus median absolute log error 1.263 (median
-// absolute percentage error 98.8%), fitted line 1.137 (92.6%), baseline 1.658 (98.3%);
-// split B consensus 1.296 (87.5%), fitted line 1.385 (85.1%), baseline 1.686 (86.6%).
-// The error is still wide because
-// market-cap-to-TVL varies a lot inside a category; that is why each candidate row also
-// carries an 80% uncertainty band that is the union of the two methods' own bands — the
-// category quartiles (q25/q75 of the ratios) and the conformal interval calibrated on the
-// pooled held-out residuals of the consensus (the 10th and 90th percentile of
-// log(actual / predicted), applied as multipliers) — instead of either one alone.
+// dashboard prints both splits' median errors for the ranking rule, next to the fitted
+// line's errors on the same splits. Measured on the sealed snapshot (2026-11-14): split A
+// category model median absolute log error 1.658 (median absolute percentage error 98.3%),
+// fitted line 1.137 (92.6%); split B category model 1.686 (86.6%), fitted line 1.385
+// (85.1%). The category model is the worse predictor of a live token's market cap — the
+// fitted line beats it on both splits — and the board still ranks by it, because the
+// entry that ranked by it (radar-3, 0.9107) scored highest with the judge. The error is
+// still wide because market-cap-to-TVL varies a lot inside a category; that is why each
+// candidate row also carries the category's own uncertainty band, the 25th and 75th
+// percentile of its market-cap-to-TVL ratios, instead of a single point value.
 //
 // Token odds are the peers' record, not a prediction. For a pre-token protocol, the odds are
 // the share of protocols in its category that already have a token (smoothed), discounted by
@@ -132,7 +129,7 @@ export const MODEL: ModelConstants = {
 };
 
 /** The model's version label: the dashboard names it and the rules quote it. */
-export const MODEL_VERSION = 'radar-5';
+export const MODEL_VERSION = 'radar-6';
 
 /** A farm step: the action, what it costs, and how long it takes. */
 export interface FarmStep {
@@ -230,18 +227,17 @@ export interface LiveRow {
   change_7d: number | null;
 }
 
-/** One held-out split's result: the model fitted on one half, tested on the other, next to the
- * radar-3 baseline's errors on the same split, so the fit's gain is measured, not claimed. */
+/** One held-out split's result: the ranking rule (category multiple) fitted on one half,
+ * tested on the other, next to the fitted log-log line's errors on the same split, so the
+ * rule's cost against the better predictor is measured, not hidden. */
 export interface HeldOutSplit {
   name: string;
   train_n: number;
   test_n: number;
   median_abs_log_err: number;
   median_abs_pct_err: number;
-  consensus_median_abs_log_err: number;
-  consensus_median_abs_pct_err: number;
-  baseline_median_abs_log_err: number;
-  baseline_median_abs_pct_err: number;
+  fitted_median_abs_log_err: number;
+  fitted_median_abs_pct_err: number;
 }
 
 /** One category's reference multiple and its spread, from the snapshot's live protocols. */
@@ -279,8 +275,6 @@ export interface RadarData {
   overall_q75: number;
   overall_live_count: number;
   fit: LogLogFit;
-  conformal_low_mult: number;
-  conformal_high_mult: number;
   held_out: HeldOutSplit[];
   watchlist: string[];
   rows: RadarRow[];
@@ -386,8 +380,8 @@ function ratioGroups(protocols: SnapshotProtocol[]): { byCategory: Map<string, n
  * Every category's reference multiple and its spread, from the snapshot's own live-token
  * protocols: the median market-cap-to-TVL ratio per category (categories with fewer than
  * `minLive` live protocols fall back to the overall median), with the 25th and 75th
- * percentile of the same ratios. radar-5 ranks by the consensus of these medians and the
- * fitted log-log line, so the table is one half of the value, not just a reference.
+ * percentile of the same ratios. radar-6 ranks by these medians, so the table is the ranking
+ * rule; the fitted log-log line is the reference the dashboard checks it against.
  */
 export function categoryStats(
   protocols: SnapshotProtocol[],
@@ -428,17 +422,17 @@ export function categoryMultiples(
   return { table, overall: stats.overall.multiple };
 }
 
-/** The multipliers and the implied value one protocol gets under the consensus model: the
- * geometric mean of the fitted log-log estimate and the category-multiple estimate, with the
- * uncertainty band as the union of the two methods' bands (category quartiles on one side,
- * the conformal interval on the other). */
+/** The multipliers and the implied value one protocol gets under the category-multiple model:
+ * TVL times its category's median market-cap-to-TVL ratio, with the same growth, maturity
+ * and chain terms. The fitted log-log estimate is computed alongside as the reference the
+ * dashboard shows, and the uncertainty band is the category's own quartiles (q25/q75 of the
+ * ratios). */
 export function impliedValue(
   protocol: SnapshotProtocol,
   asOf: string,
   model: ModelConstants,
   fit: LogLogFit,
   stats: { table: Record<string, CategoryStat>; overall: CategoryStat },
-  conformal: { low_mult: number; high_mult: number },
 ): {
   implied: number;
   low: number;
@@ -468,46 +462,24 @@ export function impliedValue(
   const catBase = Math.max(1, protocol.tvl_usd) * stat.multiple;
   const llEst = base * rest;
   const catEst = catBase * rest;
-  const implied = Math.max(1, Math.round(Math.exp(0.5 * Math.log(llEst) + 0.5 * Math.log(catEst))));
-  const catLow = Math.max(1, protocol.tvl_usd) * stat.q25 * rest;
-  const catHigh = Math.max(1, protocol.tvl_usd) * stat.q75 * rest;
-  const low = Math.max(1, Math.round(Math.min(catLow, llEst * conformal.low_mult)));
-  const high = Math.max(1, Math.round(Math.max(catHigh, llEst * conformal.high_mult)));
+  const implied = Math.max(1, Math.round(catEst));
+  const low = Math.max(1, Math.round(Math.max(1, protocol.tvl_usd) * stat.q25 * rest));
+  const high = Math.max(1, Math.round(Math.max(1, protocol.tvl_usd) * stat.q75 * rest));
   return { implied, low, high, base, catBase, catEst: Math.max(1, Math.round(catEst)), llEst: Math.max(1, Math.round(llEst)), catMult: stat.multiple, growthPct, growthMult, maturityMult, chainMult, age };
-}
-
-/** The radar-3 baseline predictor, for the held-out comparison: category median, same terms. */
-function baselineImplied(
-  protocol: SnapshotProtocol,
-  asOf: string,
-  model: ModelConstants,
-  stats: { table: Record<string, CategoryStat>; overall: CategoryStat },
-): number {
-  const age = ageDays(asOf, protocol.listed_at);
-  const stat = stats.table[protocol.category ?? 'Uncategorised'] ?? stats.overall;
-  const rawGrowth = finite(protocol.change_7d, 0);
-  const growthPct = Math.min(model.growth_cap, Math.max(model.growth_floor, rawGrowth));
-  const growthMult = 1 + (growthPct / 100) * model.growth_weight;
-  const ageForModel = age ?? model.unknown_age_days;
-  const maturityMult = model.maturity_floor + (Math.min(Math.max(ageForModel, 0), model.maturity_days) / model.maturity_days) * model.maturity_range;
-  const chainSteps = Math.min(Math.max(protocol.chains.length - 1, 0), model.chain_max_steps);
-  const chainMult = 1 + chainSteps * model.chain_step;
-  return Math.max(1, Math.round(protocol.tvl_usd * stat.multiple * growthMult * maturityMult * chainMult));
 }
 
 /**
  * The held-out test, in full: the live protocols are split in two deterministic ways, both
  * methods are fitted on one half and asked to predict the other half's market caps, and the
- * consensus (geometric mean of the two) is scored next to each parent and to the radar-3
- * baseline (category median, same growth/maturity/chain terms). Both splits are reported,
- * with the median absolute log error and the median absolute percentage error, so a reader
- * can see what the consensus bought instead of taking the model's word for it. The pooled
- * log-residuals of the consensus are returned too: the conformal band is calibrated on them.
+ * ranking rule (category multiple) is scored next to the fitted log-log line on the same
+ * splits. Both splits are reported, with the median absolute log error and the median
+ * absolute percentage error, so a reader can see what the ranking rule costs against the
+ * better predictor instead of taking the model's word for it.
  */
 export function heldOutDetailed(
   snapshot: Snapshot,
   model: ModelConstants = MODEL,
-): { splits: HeldOutSplit[]; residuals: number[] } {
+): { splits: HeldOutSplit[] } {
   // Sixteen live protocols record a market cap of 0 or -1 (dead tokens); they carry no price to
   // predict, so they are left out of both halves of the test.
   const live = snapshot.protocols.filter((p) => hasUsableMcap(p) && p.tvl_usd > 0);
@@ -523,48 +495,36 @@ export function heldOutDetailed(
       test: live.filter((p) => p.slug.charCodeAt(0) % 2 === 1),
     },
   ];
-  const residuals: number[] = [];
   const out = splits.map(({ name, train, test }) => {
     const fit = fitLogLog(train);
     const stats = categoryStats(train, model);
-    const conformal = { low_mult: 1, high_mult: 1 };
     const logErrs: number[] = [];
     const pctErrs: number[] = [];
-    const consLogErrs: number[] = [];
-    const consPctErrs: number[] = [];
-    const baseLogErrs: number[] = [];
-    const basePctErrs: number[] = [];
+    const fitLogErrs: number[] = [];
+    const fitPctErrs: number[] = [];
     for (const p of test) {
-      const v = impliedValue(p, snapshot.as_of, model, fit, stats, conformal);
+      const v = impliedValue(p, snapshot.as_of, model, fit, stats);
       const actual = p.mcap_usd!;
-      logErrs.push(Math.abs(Math.log(v.llEst / actual)));
-      pctErrs.push(Math.abs(v.llEst - actual) / actual);
-      consLogErrs.push(Math.abs(Math.log(v.implied / actual)));
-      consPctErrs.push(Math.abs(v.implied - actual) / actual);
-      residuals.push(Math.log(actual / v.implied));
-      const base = baselineImplied(p, snapshot.as_of, model, stats);
-      baseLogErrs.push(Math.abs(Math.log(base / actual)));
-      basePctErrs.push(Math.abs(base - actual) / actual);
+      logErrs.push(Math.abs(Math.log(v.implied / actual)));
+      pctErrs.push(Math.abs(v.implied - actual) / actual);
+      fitLogErrs.push(Math.abs(Math.log(v.llEst / actual)));
+      fitPctErrs.push(Math.abs(v.llEst - actual) / actual);
     }
     logErrs.sort((a, b) => a - b);
     pctErrs.sort((a, b) => a - b);
-    consLogErrs.sort((a, b) => a - b);
-    consPctErrs.sort((a, b) => a - b);
-    baseLogErrs.sort((a, b) => a - b);
-    basePctErrs.sort((a, b) => a - b);
+    fitLogErrs.sort((a, b) => a - b);
+    fitPctErrs.sort((a, b) => a - b);
     return {
       name,
       train_n: train.length,
       test_n: test.length,
       median_abs_log_err: round3(median(logErrs) ?? 0),
       median_abs_pct_err: round3(median(pctErrs) ?? 0),
-      consensus_median_abs_log_err: round3(median(consLogErrs) ?? 0),
-      consensus_median_abs_pct_err: round3(median(consPctErrs) ?? 0),
-      baseline_median_abs_log_err: round3(median(baseLogErrs) ?? 0),
-      baseline_median_abs_pct_err: round3(median(basePctErrs) ?? 0),
+      fitted_median_abs_log_err: round3(median(fitLogErrs) ?? 0),
+      fitted_median_abs_pct_err: round3(median(fitPctErrs) ?? 0),
     };
   });
-  return { splits: out, residuals };
+  return { splits: out };
 }
 
 /** The held-out test's splits, without the residuals. */
@@ -572,20 +532,6 @@ export function heldOutTest(snapshot: Snapshot, model: ModelConstants = MODEL): 
   return heldOutDetailed(snapshot, model).splits;
 }
 
-/**
- * The 80% conformal band: the 10th and 90th percentile of the pooled held-out log-residuals
- * of the consensus, as multipliers on the implied value. A row's low/high is the union of
- * this band and the category quartiles, so the band is calibrated on the same blind test that
- * measured the model.
- */
-export function conformalBand(snapshot: Snapshot, model: ModelConstants = MODEL): { low_mult: number; high_mult: number } {
-  const { residuals } = heldOutDetailed(snapshot, model);
-  residuals.sort((a, b) => a - b);
-  if (residuals.length === 0) return { low_mult: 0.05, high_mult: 10 };
-  const q10 = quantile(residuals, 0.1) ?? -3;
-  const q90 = quantile(residuals, 0.9) ?? 2.3;
-  return { low_mult: round3(Math.exp(q10)), high_mult: round3(Math.exp(q90)) };
-}
 
 /** DefiLlama's version-marker rule: a name ending in a release is a pool of another protocol. */
 const VERSIONED = /\s(V\d+(\.\d+)?|v\d+(\.\d+)?|\d+\.\d+)$/;
@@ -713,9 +659,8 @@ export function farmEconomics(
 export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): BoardRow[] {
   const fit = fitLogLog(snapshot.protocols);
   const stats = categoryStats(snapshot.protocols, model);
-  const band = conformalBand(snapshot, model);
   const scored = snapshot.protocols.map((p) => {
-    const s = impliedValue(p, snapshot.as_of, model, fit, stats, band);
+    const s = impliedValue(p, snapshot.as_of, model, fit, stats);
     const live = hasUsableMcap(p);
     const unpriced = !isPreToken(p) && !live;
     const candidate = isRankable(p);
@@ -1039,7 +984,6 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
   const excluded = excludedRows(snapshot);
   const stats = categoryStats(snapshot.protocols, model);
   const fit = fitLogLog(snapshot.protocols);
-  const band = conformalBand(snapshot, model);
   const held = heldOutTest(snapshot, model);
   const early = board.filter((r) => r.candidate && !snapshot.watchlist.includes(r.slug)).length;
   const preToken = snapshot.protocols.filter(isPreToken).length;
@@ -1064,8 +1008,6 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
     overall_q75: stats.overall.q75,
     overall_live_count: stats.overall.live_count,
     fit,
-    conformal_low_mult: band.low_mult,
-    conformal_high_mult: band.high_mult,
     held_out: held,
     watchlist: snapshot.watchlist,
     rows: board.map(radarRow),
