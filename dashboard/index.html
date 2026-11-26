@@ -22,6 +22,7 @@
 
 <nav class="tabs">
   <button class="tab active" data-tab="board">Board</button>
+  <button class="tab" data-tab="farm">Farm</button>
   <button class="tab" data-tab="live">Live tokens</button>
   <button class="tab" data-tab="excluded">Not candidates</button>
   <button class="tab" data-tab="model">How the model works</button>
@@ -66,6 +67,20 @@
     <article id="detail" class="detail" hidden></article>
   </section>
 
+  <section id="tab-farm" class="panel" hidden>
+    <p class="lede">Farm opportunities ranked by expected value: the candidates whose costed farm plan pays for itself, best first. Only launch candidates appear here — a protocol whose token already trades has nothing left to farm for a first listing. Click a row for its model breakdown and farm plan.</p>
+    <p class="count" id="farmCount"></p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Protocol</th><th>Category</th>
+          <th class="num">TVL</th><th class="num">Odds</th><th class="num">Value</th><th class="num">Cost</th><th class="num">Expected</th><th class="num">EV</th><th>Verdict</th>
+        </tr></thead>
+        <tbody id="farmRows"></tbody>
+      </table>
+    </div>
+  </section>
+
   <section id="tab-live" class="panel" hidden>
     <p class="lede">These protocols already have a token that trades, so the board shows the market's own value for them — never a model's guess. They are the comparison set the category multiples are computed from. Protocols whose token trades but the snapshot carries no market cap for are listed last with no market cap.</p>
     <div class="tablewrap">
@@ -93,16 +108,18 @@
 
   <section id="tab-model" class="panel" hidden>
     <h2>How the model works</h2>
-    <p class="lede">One formula scores every protocol. Nothing is hardcoded by name: the line is fitted from this snapshot's own live-token protocols at run time.</p>
+    <p class="lede">Two methods score every protocol, and the board ranks by their consensus. Nothing is hardcoded by name: both methods are fitted from this snapshot's own live-token protocols at run time.</p>
     <div class="formula">
-      <code>implied = exp(intercept + slope × log(TVL)) × growth × maturity × chains</code>
+      <code>implied = exp(0.5 × log(category estimate) + 0.5 × log(fitted estimate))</code>
       <p id="fitLine" class="lede"></p>
       <ul>
-        <li><b>Fitted line</b> — ordinary least squares of log(market cap) on log(TVL) over the live-token protocols with a usable market cap (16 dead tokens with a recorded market cap of 0 or −1 are left out of the fit). The slope is 0.52 on this snapshot, so market cap grows with the square root of TVL: a flat multiple of TVL overprices the giants and underprices the small protocols. The category multiples below are the reference the fit is checked against, not the ranking rule.</li>
+        <li><b>Category multiple</b> — each category's median market-cap-to-TVL ratio over its live-token protocols (categories with fewer than 5 live protocols fall back to the overall median of 0.214). A flat multiple overprices the giants: it prices a $2.75B protocol near $510M.</li>
+        <li><b>Fitted line</b> — ordinary least squares of log(market cap) on log(TVL) over the live-token protocols with a usable market cap (16 dead tokens with a recorded market cap of 0 or −1 are left out of the fit). The slope is 0.52 on this snapshot, so market cap grows with the square root of TVL: the same $2.75B protocol prices near $78M.</li>
+        <li><b>Consensus</b> — the geometric mean of the two estimates above, with the same growth, maturity and chain terms applied to both. The board ranks by the consensus, so no single method's bias decides a value: the $2.75B protocol lands near $200M, between the two parents.</li>
         <li><b>Growth</b> — 1 + clamp(7-day TVL change, −60%, +120%) × 0.6.</li>
         <li><b>Maturity</b> — 0.6 + min(age, 1095 days) / 1095 × 0.4. Older with no token yet counts for more; unknown age counts as 365 days.</li>
         <li><b>Chains</b> — 1 + 0.01 per extra chain, up to 10 chains.</li>
-        <li><b>Uncertainty range</b> — an 80% conformal interval, calibrated on the pooled held-out residuals of the test below: the implied value times the 10th and 90th percentile of log(actual / predicted). The range is wide because market-cap-to-TVL varies a lot inside a category; the dashboard shows it on every row's detail view.</li>
+        <li><b>Uncertainty range</b> — the union of the two methods' own bands: the category quartiles (25th and 75th percentile of the category's market-cap-to-TVL ratios) and an 80% conformal interval, calibrated on the pooled held-out residuals of the consensus — the implied value times the 10th and 90th percentile of log(actual / predicted). The range is wide because market-cap-to-TVL varies a lot inside a category; the dashboard shows it on every row's detail view.</li>
         <li><b>Launch odds</b> — the share of protocols in the same category that already have a token, smoothed, discounted by age. A base rate from the peers' record, not a prediction of whether or when a token is issued.</li>
         <li><b>Farm verdict</b> — the plan's cost against its expected reward. Cost is gas for six steps on the protocol's first chain (Ethereum $5, BSC $0.10, Solana $0.05, other chains $0.50 a step), impermanent loss or slippage on the capital (2% for liquidity positions, 0.5% otherwise), and the opportunity cost of locking the capital at 4% a year. Expected reward is the launch odds times 5% of the implied value — the stated airdrop pool — shared among the estimated farmers (TVL / $5,000 each, at least 100). “Worth farming” clears the cost, “Marginal” is positive but below it, “Skip” is negative. Every assumption is stated here so the verdict can be re-derived from the row's own figures.</li>
       </ul>
@@ -110,10 +127,10 @@
     <h3>Held-out test — the model is tested, not just asserted</h3>
     <p class="lede">The live protocols are split in two deterministic ways and the full model is fitted on one half and asked to predict the other half's market caps. The baseline is the radar-3 model — each category's median multiple with the same growth, maturity and chain terms — scored on the same splits, so the fit's gain is measured, not claimed.</p>
     <div class="tablewrap"><table>
-      <thead><tr><th>Split</th><th class="num">Train</th><th class="num">Test</th><th class="num">Median |log error|</th><th class="num">Median miss</th><th class="num">Baseline |log error|</th><th class="num">Baseline miss</th></tr></thead>
+      <thead><tr><th>Split</th><th class="num">Train</th><th class="num">Test</th><th class="num">Consensus |log error|</th><th class="num">Consensus miss</th><th class="num">Fitted line |log error|</th><th class="num">Fitted miss</th><th class="num">Baseline |log error|</th><th class="num">Baseline miss</th></tr></thead>
       <tbody id="heldRows"></tbody>
     </table></div>
-    <p class="lede">The miss is still large — around 90% at the median — because market-cap-to-TVL varies by more than a hundredfold inside a single category, so no function of TVL can price a live token closely. The fit still cuts the median log error on both splits (1.66 → 1.14 and 1.69 → 1.39). Growth, maturity and chains are kept because each one was tested on both splits and only the terms that helped both stayed; the category-intercept and multi-variable variants were tried and dropped for the same reason.</p>
+    <p class="lede">The miss is still large — around 90% at the median — because market-cap-to-TVL varies by more than a hundredfold inside a single category, so no function of TVL can price a live token closely. The consensus sits between the two parents on both splits: split A 1.26 against the fitted line's 1.14, split B 1.30 against 1.39 — within noise of the better parent on both, and far below the category baseline (1.66 and 1.69). It is chosen because it hedges either method's bias, not because it wins the test outright. Growth, maturity and chains are kept because each one was tested on both splits and only the terms that helped both stayed; the category-intercept and multi-variable variants were tried and dropped for the same reason.</p>
     <h3>Category multiples, computed from this snapshot</h3>
     <div class="tablewrap"><table>
       <thead><tr><th>Category</th><th class="num">Multiple</th><th class="num">25th pct</th><th class="num">75th pct</th><th class="num">Live protocols</th></tr></thead>
@@ -126,7 +143,7 @@
 </main>
 
 <footer>
-  <p>Snapshot: DefiLlama public API, fetched <span id="asof"></span> · <span id="src"></span> · Watchlist floor $50,000,000 TVL · Model radar-4</p>
+  <p>Snapshot: DefiLlama public API, fetched <span id="asof"></span> · <span id="src"></span> · Watchlist floor $50,000,000 TVL · Model radar-5</p>
   <p class="warn">Not financial advice. Farming a protocol costs gas and locks capital; a token may never launch, and an airdrop may never come.</p>
 </footer>
 
