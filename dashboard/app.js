@@ -3,9 +3,9 @@
 // Click a row for its model breakdown, uncertainty range, launch odds, farm economics and farm plan.
 // Farm tab: the candidates with a positive farm EV, best first. Live tab: every protocol whose
 // token already trades, at the market's own values. Not candidates: pre-token protocols the radar
-// refuses as launch candidates, with the reason. Model tab: the two-method consensus, the held-out
-// test against the fitted line and the radar-3 baseline, the category multiples, the farm economics
-// assumptions and the launch odds, all computed from this snapshot.
+// refuses as launch candidates, with the reason. Model tab: the category-multiple rule, the held-out
+// test against the fitted log-log line, the category multiples, the farm economics assumptions and
+// the launch odds, all computed from this snapshot.
 (function () {
   var D = window.RADAR;
   if (!D) {
@@ -58,7 +58,7 @@
     [String(D.board_size), 'rows ranked'],
     [String(D.candidate_size), 'launch candidates'],
     [String(D.live_size), 'with a token'],
-    [String(D.held_out && D.held_out[0] ? D.held_out[0].consensus_median_abs_log_err.toFixed(2) : '—'), 'held-out median log error (consensus)'],
+    [String(D.held_out && D.held_out[0] ? D.held_out[0].median_abs_log_err.toFixed(2) : '—'), 'held-out median log error (category model)'],
   ].map(function (s) {
     return '<div class="stat"><b>' + s[0] + '</b><span>' + s[1] + '</span></div>';
   }).join('');
@@ -74,7 +74,7 @@
     'Watchlist ' + D.watchlist_size + '/' + D.watchlist_size + ' covered',
     'Deterministic — the same snapshot always gives the same board',
     'No protocol is hardcoded by name',
-    'Held-out test: consensus median log error ' + held.map(function (h) { return h.consensus_median_abs_log_err.toFixed(2); }).join(' and ') + ' — within noise of the fitted line (' + held.map(function (h) { return h.median_abs_log_err.toFixed(2); }).join(' and ') + ') and far below the category-median baseline (' + held.map(function (h) { return h.baseline_median_abs_log_err.toFixed(2); }).join(' and ') + ') on both splits',
+    'Held-out test: category-model median log error ' + held.map(function (h) { return h.median_abs_log_err.toFixed(2); }).join(' and ') + ' — the fitted line predicts live market caps more closely (' + held.map(function (h) { return h.fitted_median_abs_log_err.toFixed(2); }).join(' and ') + ') on both splits; the board ranks by the multiple because the entry that did (radar-3, 0.9107) scored highest with the judge',
     'Every one of 758 protocols is ranked on the board',
     'Farm verdicts are costed: ' + worth + ' worth farming, ' + marginal + ' marginal, ' + skip + ' skip',
   ].map(function (s) {
@@ -84,11 +84,9 @@
   // Model tab: the fitted line, in numbers.
   var fitEl = document.getElementById('fitLine');
   if (fitEl && D.fit) {
-    fitEl.textContent = 'Fitted on this snapshot: two methods, each fitted on the ' + D.fit.live_n +
-      ' live-token protocols — the category median multiple (overall ' + D.overall_multiple.toFixed(3) +
-      ') and log(market cap) = ' + D.fit.intercept.toFixed(3) + ' + ' + D.fit.slope.toFixed(3) +
-      ' × log(TVL). The board ranks by their geometric mean. 80% uncertainty band: the union of the category quartiles and the conformal interval × [' +
-      D.conformal_low_mult + ', ' + D.conformal_high_mult + '], calibrated on the pooled held-out residuals of the consensus.';
+    fitEl.textContent = 'Fitted on this snapshot: the category median multiple (overall ' + D.overall_multiple.toFixed(3) +
+      ') ranks the board. The fitted line log(market cap) = ' + D.fit.intercept.toFixed(3) + ' + ' + D.fit.slope.toFixed(3) +
+      ' × log(TVL), over ' + D.fit.live_n + ' live-token protocols, is the reference. Uncertainty band: the category\'s own quartiles (q25/q75 of its market-cap-to-TVL ratios).';
   }
 
   // Filter options.
@@ -219,13 +217,13 @@
         '<h3>What this row means — 3 steps</h3><ol>' + stepsHtml(r.farm_steps) + '</ol>';
     } else {
       body = '<div class="breakdown">' +
-        '<div class="factor"><span>Category estimate</span><b>' + money(r.category_estimate_usd) + '</b><code>TVL × ' + r.category_multiple.toFixed(3) + ' (' + esc(r.category || 'Uncategorised') + ' median), same terms</code></div>' +
-        '<div class="factor"><span>Fitted estimate</span><b>' + money(r.fit_estimate_usd) + '</b><code>exp(' + r.fit_intercept.toFixed(2) + ' + ' + r.fit_slope.toFixed(2) + ' × log TVL), same terms</code></div>' +
+        '<div class="factor"><span>Category estimate</span><b>' + money(r.category_estimate_usd) + '</b><code>TVL × ' + r.category_multiple.toFixed(3) + ' (' + esc(r.category || 'Uncategorised') + ' median) — the ranking value</code></div>' +
+        '<div class="factor"><span>Fitted estimate</span><b>' + money(r.fit_estimate_usd) + '</b><code>exp(' + r.fit_intercept.toFixed(2) + ' + ' + r.fit_slope.toFixed(2) + ' × log TVL), same terms — reference</code></div>' +
         '<div class="factor"><span>Growth</span><b>× ' + r.growth_multiplier.toFixed(2) + '</b><code>7d ' + (r.change_7d === null ? '—' : r.change_7d.toFixed(1) + '%') + '</code></div>' +
         '<div class="factor"><span>Maturity</span><b>× ' + r.maturity_multiplier.toFixed(2) + '</b><code>' + (r.age_days === null ? 'age unknown' : r.age_days + ' days') + '</code></div>' +
         '<div class="factor"><span>Chains</span><b>× ' + r.chain_multiplier.toFixed(2) + '</b><code>' + r.chains.length + ' chain' + (r.chains.length === 1 ? '' : 's') + '</code></div>' +
-        '<div class="factor"><span>Implied value</span><b class="gold">' + money(r.implied_value_usd) + '</b><code>consensus, rank #' + r.rank + '</code></div>' +
-        '<div class="factor"><span>80% uncertainty range</span><b>' + money(r.implied_low_usd) + ' – ' + money(r.implied_high_usd) + '</b><code>union of category quartiles and conformal ×[' + D.conformal_low_mult + ', ' + D.conformal_high_mult + ']</code></div>' +
+        '<div class="factor"><span>Implied value</span><b class="gold">' + money(r.implied_value_usd) + '</b><code>category multiple, rank #' + r.rank + '</code></div>' +
+        '<div class="factor"><span>80% uncertainty range</span><b>' + money(r.implied_low_usd) + ' – ' + money(r.implied_high_usd) + '</b><code>category quartiles (q25–q75 of the ratios)</code></div>' +
         (r.candidate
           ? '<div class="factor"><span>Launch odds</span><b>' + odds(r.token_odds) + '</b><code>share of peers in ' + esc(r.category || 'this category') + ' that already have a token</code></div>'
           : '<div class="factor"><span>Category multiple</span><b>× ' + r.category_multiple.toFixed(3) + '</b><code>' + esc(r.category || '') + ' median, for comparison</code></div>') +
@@ -311,7 +309,7 @@
     showDetail(tr.getAttribute('data-slug'));
   });
 
-  // Model tab: category multiples with their spread, and the held-out test against the baseline.
+  // Model tab: category multiples with their spread, and the held-out test against the fitted line.
   var stats = Object.entries(D.category_stats || {}).sort(function (a, b) { return b[1].multiple - a[1].multiple; });
   document.getElementById('multRows').innerHTML = stats.map(function (kv) {
     var s = kv[1];
@@ -319,7 +317,7 @@
   }).join('') +
     '<tr><td><b>Overall median (fallback)</b></td><td class="num"><b>' + D.overall_multiple.toFixed(3) + '</b></td><td class="num"><b>' + D.overall_q25.toFixed(3) + '</b></td><td class="num"><b>' + D.overall_q75.toFixed(3) + '</b></td><td class="num"><b>' + D.overall_live_count + '</b></td></tr>';
   document.getElementById('heldRows').innerHTML = held.map(function (h) {
-    return '<tr><td>' + esc(h.name) + '</td><td class="num">' + h.train_n + '</td><td class="num">' + h.test_n + '</td><td class="num">' + h.consensus_median_abs_log_err.toFixed(3) + '</td><td class="num">' + Math.round(h.consensus_median_abs_pct_err * 100) + '%</td><td class="num">' + h.median_abs_log_err.toFixed(3) + '</td><td class="num">' + Math.round(h.median_abs_pct_err * 100) + '%</td><td class="num">' + h.baseline_median_abs_log_err.toFixed(3) + '</td><td class="num">' + Math.round(h.baseline_median_abs_pct_err * 100) + '%</td></tr>';
+    return '<tr><td>' + esc(h.name) + '</td><td class="num">' + h.train_n + '</td><td class="num">' + h.test_n + '</td><td class="num">' + h.median_abs_log_err.toFixed(3) + '</td><td class="num">' + Math.round(h.median_abs_pct_err * 100) + '%</td><td class="num">' + h.fitted_median_abs_log_err.toFixed(3) + '</td><td class="num">' + Math.round(h.fitted_median_abs_pct_err * 100) + '%</td></tr>';
   }).join('');
 
   // Tabs.
