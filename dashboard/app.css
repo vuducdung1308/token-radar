@@ -64,7 +64,7 @@ h1 { margin: 0; font-size: 30px; letter-spacing: 2px; color: var(--gold); }
 }
 .tab.active { color: var(--gold); border-bottom-color: var(--gold); }
 .tab:hover { color: var(--text); }
-main { padding: 20px 28px 28px; max-width: 1180px; }
+main { padding: 20px 28px 28px; max-width: 1380px; }
 .panel h2 { margin: 6px 0 8px; font-size: 22px; }
 .panel h3 { margin: 22px 0 8px; font-size: 17px; color: var(--gold); }
 .lede { color: var(--muted); max-width: 820px; }
@@ -80,7 +80,7 @@ main { padding: 20px 28px 28px; max-width: 1180px; }
 .count { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
 .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
 table { width: 100%; border-collapse: collapse; background: var(--panel); }
-th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th, td { padding: 8px 7px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; font-size: 14px; }
 thead th {
   background: var(--panel2); color: var(--muted);
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px;
@@ -102,6 +102,15 @@ td .slug { display: block; font-size: 12px; color: var(--muted); }
 }
 .status-cand { background: #3a2f00; color: var(--gold); }
 .status-live { background: #0e2f3d; color: var(--cyan); }
+.status-unpriced { background: #2a2140; color: #c4b5fd; }
+.status-excluded { background: #1a2233; color: var(--muted); }
+.verdict {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 12px; font-weight: 650; white-space: nowrap;
+}
+.verdict-worth { background: #0b2e22; color: var(--green); }
+.verdict-marginal { background: #3a2f00; color: var(--gold); }
+.verdict-skip { background: #2b1215; color: var(--red); }
 .tag { font-size: 11px; color: var(--muted); font-weight: 400; }
 .reason { white-space: normal; color: var(--muted); font-size: 13px; min-width: 280px; }
 .up { color: var(--green); }
