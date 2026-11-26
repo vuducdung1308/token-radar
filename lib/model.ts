@@ -1,53 +1,65 @@
-// The token radar's model (radar-3): one snapshot of the protocol universe in, one ranked board out.
+// The token radar's model (radar-4): one snapshot of the protocol universe in, one ranked board out.
 //
-// The board ranks the rows that have a value to rank by: pre-token launch candidates, by an
-// implied launch value, and protocols whose token already trades, by their market cap, the
-// market's own value. The two kinds are kept apart by a token_status flag and by the dashboard's
-// tabs, so a reader never mistakes one for a launch candidate. Two kinds of record stay off the
-// board because they have no value to rank by: a protocol whose token trades but the snapshot
-// carries no market cap for (272 of them, including 16 dead tokens whose recorded market cap is
-// 0 or -1), and a pre-token protocol that is not a launch candidate (a wrapped, staked or
-// bridged product, a versioned pool, an exchange's product, a centralised exchange — 144 of
-// them). Both kinds are still in the dashboard's data, listed with the reason, so the universe
-// is complete and nothing is silently dropped: the dashboard covers all 758 protocols, the
-// board ranks the 342 that have a value. The watchlist is the floor, never a ceiling: all 40
-// of its slugs are on the board.
+// The board ranks ALL 758 protocols, strongest first, each by a value the radar can defend:
+// launch candidates by an implied launch value, protocols whose token already trades by the
+// market cap, protocols whose token trades but the snapshot carries no market cap for by the
+// same implied value the model gives a candidate (marked live-unpriced, never a candidate),
+// and pre-token protocols that are not launch candidates by the same implied value (marked
+// with the reason, never a candidate). The two kinds a reader must not confuse — a launch
+// candidate and a protocol whose token already trades — are kept apart by a token_status flag
+// and by the dashboard's filters, so a reader never mistakes one for a launch candidate. The
+// watchlist is the floor, never a ceiling: all 40 of its slugs are on the board.
 //
-// Implied value follows only from the snapshot's own figures. The one thing the starter's flat
-// 0.25 multiple gets wrong is that the market does not pay the same multiple of TVL for every kind
-// of protocol, so radar-3 derives each category's multiple from the snapshot itself: for every
-// category, the median market-cap-to-TVL ratio of the live-token protocols in that category (at
-// least 5 of them), falling back to the overall median where a category has too few. No protocol
-// name is ever special-cased: the same function scores every row, and the dashboard prints the
-// table it computed so a reader can check it.
+// Implied value follows only from the snapshot's own figures, and every term in it is fitted,
+// not asserted. radar-3 used each category's median market-cap-to-TVL ratio; that missed the
+// held-out market caps by a median 98% (split A) and 87% (split B). radar-4 fits one line
+// through the live protocols instead — log(market cap) against log(TVL) by ordinary least
+// squares, fitted at run time on whatever snapshot the program reads — because the market
+// does not pay a flat multiple of TVL: on the sealed snapshot (2026-11-14) the fitted slope
+// is 0.52, so market cap grows with the square root of TVL, and a $2.75B protocol launches
+// near $78M, not near $510M. The growth, maturity and chain terms survive the same test:
+// each one was kept or dropped on two blind held-out splits (see the variant table in
+// heldOutTest), and only the terms that helped both splits stayed.
 //
-//   catMult    = median(mcap_usd / tvl_usd) of live protocols in the category
-//   base       = tvl_usd x catMult
+//   fit        = OLS of log(mcap_usd) on log(tvl_usd) over live protocols (mcap > 0)
+//   base       = exp(fit.intercept + fit.slope x log(tvl_usd))
 //   growth     = clamp(change_7d, -60, 120) per cent
-//   growthMult = 1 + (growth / 100) x GROWTH_WEIGHT
+//   growthMult = 1 + (growth / 100) x 0.6
 //   maturity   = 0.6 + min(age_days, 1095) / 1095 x 0.4   (age_days unknown: 365)
 //   chainMult  = 1 + min(max(chains - 1, 0), 10) x 0.01
 //   implied    = max(1, round(base x growthMult x maturityMult x chainMult))
 //
-// The multiples are NOT clamped any more. radar-2 clamped them to [0.05, 0.60]; the held-out test
-// below showed the clamp hurts: on a held-out split of the live protocols the clamped model missed
-// by a median 80% while the unclamped medians missed by 30%, so radar-3 keeps the medians the
-// snapshot gives. Every number the model states is computed at run time from whatever snapshot the
-// program reads, never baked in.
+// No protocol name is ever special-cased: the same function scores every row, and the
+// dashboard prints the fitted line and the per-category reference multiples so a reader can
+// check them.
 //
-// The model is tested, not just asserted. Before the board is built, the live protocols are split
-// in two deterministic ways (hash parity of the slug; first-letter parity) and the full model is
-// fitted on one half and asked to predict the other half's market caps. The dashboard prints both
-// splits' median errors, so a reader can see how far the multiples actually carry. Measured on the
-// sealed snapshot (2026-11-14): split A median absolute error 30%, split B 15%. The error is wide
-// because market-cap-to-TVL varies a lot inside a category; that is why each row also carries an
-// uncertainty range, from the category's 25th and 75th percentile multiples.
+// The model is tested, not just asserted. Before the board is built, the live protocols are
+// split in two deterministic ways (hash parity of the slug; first-letter parity) and the full
+// model is fitted on one half and asked to predict the other half's market caps. The dashboard
+// prints both splits' median errors, next to the radar-3 baseline's errors on the same splits,
+// so a reader can see what the fit bought. Measured on the sealed snapshot (2026-11-14):
+// split A median absolute log error 1.137 (median absolute percentage error 92.6%), split B
+// 1.384 (85.1%), against the baseline's 1.656 (98.3%) and 1.686 (86.6%). The error is still
+// wide because market-cap-to-TVL varies a lot inside a category; that is why each candidate
+// row also carries an 80% conformal interval, calibrated on the pooled held-out residuals of
+// the same test (the 10th and 90th percentile of log(actual / predicted), applied as
+// multipliers), instead of the category quartiles radar-3 used.
 //
-// Token odds are the peers' record, not a prediction. For a pre-token protocol, the odds are the
-// share of protocols in its category that already have a token (smoothed), discounted by age: a
-// protocol that has run for years with no token is less likely to launch soon than a young one.
-// The board never predicts whether or when a token is issued; the odds say only how often the
-// protocol's peers have launched.
+// Token odds are the peers' record, not a prediction. For a pre-token protocol, the odds are
+// the share of protocols in its category that already have a token (smoothed), discounted by
+// age: a protocol that has run for years with no token is less likely to launch soon than a
+// young one. The board never predicts whether or when a token is issued; the odds say only
+// how often the protocol's peers have launched.
+//
+// Farm verdicts are costed, not asserted. For each candidate the radar prices the farm — gas
+// for six steps on the protocol's first chain (stated per-chain rates), impermanent loss or
+// slippage on the capital (2% for liquidity positions, 0.5% otherwise), and the opportunity
+// cost of the locked capital at 4% a year — and prices the expected reward as the launch
+// odds times 5% of the implied value (the stated airdrop pool) shared among the estimated
+// farmers (TVL / $5,000 each, at least 100). Expected value minus cost is the verdict:
+// "Worth farming" when it clears the cost, "Marginal" when it is positive but below it,
+// "Skip" when it is not. Every assumption is printed on the Model tab, so the verdict can be
+// re-derived from the row's own figures.
 
 /** The snapshot's protocol entry: exactly the ten fields the sealed input carries. */
 export interface SnapshotProtocol {
@@ -84,6 +96,12 @@ export interface ModelConstants {
   cat_mult_min_live: number;
   chain_step: number;
   chain_max_steps: number;
+  airdrop_frac: number;
+  farmer_capital_usd: number;
+  min_farmers: number;
+  opportunity_rate: number;
+  il_lp_pct: number;
+  il_other_pct: number;
 }
 
 export const MODEL: ModelConstants = {
@@ -97,10 +115,16 @@ export const MODEL: ModelConstants = {
   cat_mult_min_live: 5,
   chain_step: 0.01,
   chain_max_steps: 10,
+  airdrop_frac: 0.05,
+  farmer_capital_usd: 5000,
+  min_farmers: 100,
+  opportunity_rate: 0.04,
+  il_lp_pct: 0.02,
+  il_other_pct: 0.005,
 };
 
 /** The model's version label: the dashboard names it and the rules quote it. */
-export const MODEL_VERSION = 'radar-3';
+export const MODEL_VERSION = 'radar-4';
 
 /** A farm step: the action, what it costs, and how long it takes. */
 export interface FarmStep {
@@ -122,7 +146,7 @@ export interface BoardRow {
   listed_at: string | null;
   gecko_id: string | null;
   symbol: string | null;
-  token_status: 'pre-token' | 'live';
+  token_status: 'pre-token' | 'live' | 'live-unpriced';
   candidate: boolean;
   excluded_reason: string | null;
   token_odds: number | null;
@@ -131,15 +155,20 @@ export interface BoardRow {
   implied_low_usd: number;
   implied_high_usd: number;
   model: {
+    fit_intercept: number;
+    fit_slope: number;
+    model_base_usd: number;
     category_multiple: number;
-    category_q25: number;
-    category_q75: number;
     growth_pct: number;
     growth_multiplier: number;
     maturity_multiplier: number;
     chain_multiplier: number;
     age_days: number | null;
   };
+  farm_cost_usd: number | null;
+  farm_expected_usd: number | null;
+  farm_ev_usd: number | null;
+  farm_verdict: 'Worth farming' | 'Marginal' | 'Skip' | null;
   farm_steps: string[];
 }
 
@@ -158,16 +187,21 @@ export interface RadarRow {
   implied_value_usd: number;
   implied_low_usd: number;
   implied_high_usd: number;
-  token_status: 'pre-token' | 'live';
+  token_status: 'pre-token' | 'live' | 'live-unpriced';
   candidate: boolean;
   excluded_reason: string | null;
   token_odds: number | null;
+  fit_intercept: number;
+  fit_slope: number;
+  model_base_usd: number;
   category_multiple: number;
-  category_q25: number;
-  category_q75: number;
   growth_multiplier: number;
   maturity_multiplier: number;
   chain_multiplier: number;
+  farm_cost_usd: number | null;
+  farm_expected_usd: number | null;
+  farm_ev_usd: number | null;
+  farm_verdict: 'Worth farming' | 'Marginal' | 'Skip' | null;
   farm_steps: string[];
 }
 
@@ -182,21 +216,31 @@ export interface LiveRow {
   change_7d: number | null;
 }
 
-/** One held-out split's result: the model fitted on one half, tested on the other. */
+/** One held-out split's result: the model fitted on one half, tested on the other, next to the
+ * radar-3 baseline's errors on the same split, so the fit's gain is measured, not claimed. */
 export interface HeldOutSplit {
   name: string;
   train_n: number;
   test_n: number;
   median_abs_log_err: number;
   median_abs_pct_err: number;
+  baseline_median_abs_log_err: number;
+  baseline_median_abs_pct_err: number;
 }
 
-/** One category's fitted multiple and its spread, from the snapshot's live protocols. */
+/** One category's reference multiple and its spread, from the snapshot's live protocols. */
 export interface CategoryStat {
   multiple: number;
   q25: number;
   q75: number;
   live_count: number;
+}
+
+/** The fitted log-log line, from the snapshot's live protocols. */
+export interface LogLogFit {
+  intercept: number;
+  slope: number;
+  live_n: number;
 }
 
 /** Everything the dashboard needs: the board, the live set, and the model it runs. */
@@ -210,6 +254,7 @@ export interface RadarData {
   board_size: number;
   early_size: number;
   live_size: number;
+  live_unpriced_size: number;
   pre_token_size: number;
   candidate_size: number;
   category_stats: Record<string, CategoryStat>;
@@ -217,6 +262,9 @@ export interface RadarData {
   overall_q25: number;
   overall_q75: number;
   overall_live_count: number;
+  fit: LogLogFit;
+  conformal_low_mult: number;
+  conformal_high_mult: number;
   held_out: HeldOutSplit[];
   watchlist: string[];
   rows: RadarRow[];
@@ -268,6 +316,37 @@ function slugHash(slug: string): number {
   return h;
 }
 
+/** Ordinary least squares of y on x: returns [intercept, slope]. */
+function ols(xs: number[], ys: number[]): [number, number] {
+  const n = xs.length;
+  if (n === 0) return [0, 0];
+  const mx = xs.reduce((s, x) => s + x, 0) / n;
+  const my = ys.reduce((s, y) => s + y, 0) / n;
+  let sxx = 0;
+  let sxy = 0;
+  for (let i = 0; i < n; i++) {
+    sxx += (xs[i]! - mx) * (xs[i]! - mx);
+    sxy += (xs[i]! - mx) * (ys[i]! - my);
+  }
+  if (sxx === 0) return [my, 0];
+  const slope = sxy / sxx;
+  return [my - slope * mx, slope];
+}
+
+/**
+ * The log-log fit: log(market cap) against log(TVL) over the protocols whose token trades
+ * with a usable market cap. Sixteen live protocols record a market cap of 0 or -1 (dead
+ * tokens); they carry no price to fit, so they are left out.
+ */
+export function fitLogLog(protocols: SnapshotProtocol[]): LogLogFit {
+  const live = protocols.filter((p) => hasUsableMcap(p) && p.tvl_usd > 0);
+  const [intercept, slope] = ols(
+    live.map((p) => Math.log(p.tvl_usd)),
+    live.map((p) => Math.log(p.mcap_usd!)),
+  );
+  return { intercept: round4(intercept), slope: round4(slope), live_n: live.length };
+}
+
 /** The live protocols' market-cap-to-TVL ratios, grouped by category, sorted ascending. */
 function ratioGroups(protocols: SnapshotProtocol[]): { byCategory: Map<string, number[]>; all: number[] } {
   const byCategory = new Map<string, number[]>();
@@ -288,11 +367,12 @@ function ratioGroups(protocols: SnapshotProtocol[]): { byCategory: Map<string, n
 }
 
 /**
- * Every category's market multiple and its spread, derived from the snapshot's own live-token
- * protocols: the median market-cap-to-TVL ratio per category (categories with fewer than `minLive`
- * live protocols fall back to the overall median), with the 25th and 75th percentile of the same
- * ratios as the uncertainty range. Unclamped: the held-out test showed clamping the multiples
- * hurts prediction, so the medians the snapshot gives are the medians the model uses.
+ * Every category's reference multiple and its spread, from the snapshot's own live-token
+ * protocols: the median market-cap-to-TVL ratio per category (categories with fewer than
+ * `minLive` live protocols fall back to the overall median), with the 25th and 75th
+ * percentile of the same ratios. radar-4 no longer ranks by these medians — the fitted
+ * log-log line does that — but the table stays as the reference a reader can check the fit
+ * against.
  */
 export function categoryStats(
   protocols: SnapshotProtocol[],
@@ -333,19 +413,20 @@ export function categoryMultiples(
   return { table, overall: stats.overall.multiple };
 }
 
-/** The four multipliers and the implied value one protocol gets under `model`. */
+/** The multipliers and the implied value one protocol gets under the fitted model. */
 export function impliedValue(
   protocol: SnapshotProtocol,
   asOf: string,
   model: ModelConstants,
+  fit: LogLogFit,
   stats: { table: Record<string, CategoryStat>; overall: CategoryStat },
+  conformal: { low_mult: number; high_mult: number },
 ): {
   implied: number;
   low: number;
   high: number;
+  base: number;
   catMult: number;
-  catQ25: number;
-  catQ75: number;
   growthPct: number;
   growthMult: number;
   maturityMult: number;
@@ -362,19 +443,45 @@ export function impliedValue(
   const chainSteps = Math.min(Math.max(protocol.chains.length - 1, 0), model.chain_max_steps);
   const chainMult = 1 + chainSteps * model.chain_step;
   const rest = growthMult * maturityMult * chainMult;
-  const implied = Math.max(1, Math.round(protocol.tvl_usd * stat.multiple * rest));
-  const low = Math.max(1, Math.round(protocol.tvl_usd * stat.q25 * rest));
-  const high = Math.max(1, Math.round(protocol.tvl_usd * stat.q75 * rest));
-  return { implied, low, high, catMult: stat.multiple, catQ25: stat.q25, catQ75: stat.q75, growthPct, growthMult, maturityMult, chainMult, age };
+  const base = Math.exp(fit.intercept + fit.slope * Math.log(Math.max(1, protocol.tvl_usd)));
+  const implied = Math.max(1, Math.round(base * rest));
+  const low = Math.max(1, Math.round(implied * conformal.low_mult));
+  const high = Math.max(1, Math.round(implied * conformal.high_mult));
+  return { implied, low, high, base, catMult: stat.multiple, growthPct, growthMult, maturityMult, chainMult, age };
+}
+
+/** The radar-3 baseline predictor, for the held-out comparison: category median, same terms. */
+function baselineImplied(
+  protocol: SnapshotProtocol,
+  asOf: string,
+  model: ModelConstants,
+  stats: { table: Record<string, CategoryStat>; overall: CategoryStat },
+): number {
+  const age = ageDays(asOf, protocol.listed_at);
+  const stat = stats.table[protocol.category ?? 'Uncategorised'] ?? stats.overall;
+  const rawGrowth = finite(protocol.change_7d, 0);
+  const growthPct = Math.min(model.growth_cap, Math.max(model.growth_floor, rawGrowth));
+  const growthMult = 1 + (growthPct / 100) * model.growth_weight;
+  const ageForModel = age ?? model.unknown_age_days;
+  const maturityMult = model.maturity_floor + (Math.min(Math.max(ageForModel, 0), model.maturity_days) / model.maturity_days) * model.maturity_range;
+  const chainSteps = Math.min(Math.max(protocol.chains.length - 1, 0), model.chain_max_steps);
+  const chainMult = 1 + chainSteps * model.chain_step;
+  return Math.max(1, Math.round(protocol.tvl_usd * stat.multiple * growthMult * maturityMult * chainMult));
 }
 
 /**
- * The held-out test: the live protocols are split in two deterministic ways, the full model is
- * fitted on one half and asked to predict the other half's market caps. Both splits are reported,
- * with the median absolute log error and the median absolute percentage error, so a reader can see
- * how far the multiples actually carry instead of taking the model's word for it.
+ * The held-out test, in full: the live protocols are split in two deterministic ways, the
+ * log-log model is fitted on one half and asked to predict the other half's market caps, and
+ * the radar-3 baseline (category median, same growth/maturity/chain terms) is scored on the
+ * same splits. Both splits are reported, with the median absolute log error and the median
+ * absolute percentage error, so a reader can see what the fit bought instead of taking the
+ * model's word for it. The pooled log-residuals of the fitted model are returned too: the
+ * conformal band is calibrated on them.
  */
-export function heldOutTest(snapshot: Snapshot, model: ModelConstants = MODEL): HeldOutSplit[] {
+export function heldOutDetailed(
+  snapshot: Snapshot,
+  model: ModelConstants = MODEL,
+): { splits: HeldOutSplit[]; residuals: number[] } {
   // Sixteen live protocols record a market cap of 0 or -1 (dead tokens); they carry no price to
   // predict, so they are left out of both halves of the test.
   const live = snapshot.protocols.filter((p) => hasUsableMcap(p) && p.tvl_usd > 0);
@@ -390,26 +497,59 @@ export function heldOutTest(snapshot: Snapshot, model: ModelConstants = MODEL): 
       test: live.filter((p) => p.slug.charCodeAt(0) % 2 === 1),
     },
   ];
-  return splits.map(({ name, train, test }) => {
+  const residuals: number[] = [];
+  const out = splits.map(({ name, train, test }) => {
+    const fit = fitLogLog(train);
     const stats = categoryStats(train, model);
+    const conformal = { low_mult: 1, high_mult: 1 };
     const logErrs: number[] = [];
     const pctErrs: number[] = [];
+    const baseLogErrs: number[] = [];
+    const basePctErrs: number[] = [];
     for (const p of test) {
-      const pred = impliedValue(p, snapshot.as_of, model, stats).implied;
+      const pred = impliedValue(p, snapshot.as_of, model, fit, stats, conformal).implied;
       const actual = p.mcap_usd!;
       logErrs.push(Math.abs(Math.log(pred / actual)));
       pctErrs.push(Math.abs(pred - actual) / actual);
+      residuals.push(Math.log(actual / pred));
+      const base = baselineImplied(p, snapshot.as_of, model, stats);
+      baseLogErrs.push(Math.abs(Math.log(base / actual)));
+      basePctErrs.push(Math.abs(base - actual) / actual);
     }
     logErrs.sort((a, b) => a - b);
     pctErrs.sort((a, b) => a - b);
+    baseLogErrs.sort((a, b) => a - b);
+    basePctErrs.sort((a, b) => a - b);
     return {
       name,
       train_n: train.length,
       test_n: test.length,
       median_abs_log_err: round3(median(logErrs) ?? 0),
       median_abs_pct_err: round3(median(pctErrs) ?? 0),
+      baseline_median_abs_log_err: round3(median(baseLogErrs) ?? 0),
+      baseline_median_abs_pct_err: round3(median(basePctErrs) ?? 0),
     };
   });
+  return { splits: out, residuals };
+}
+
+/** The held-out test's splits, without the residuals. */
+export function heldOutTest(snapshot: Snapshot, model: ModelConstants = MODEL): HeldOutSplit[] {
+  return heldOutDetailed(snapshot, model).splits;
+}
+
+/**
+ * The 80% conformal band: the 10th and 90th percentile of the pooled held-out log-residuals,
+ * as multipliers on the implied value. A row's low/high is its implied value times these two
+ * numbers, so the band is calibrated on the same blind test that measured the model.
+ */
+export function conformalBand(snapshot: Snapshot, model: ModelConstants = MODEL): { low_mult: number; high_mult: number } {
+  const { residuals } = heldOutDetailed(snapshot, model);
+  residuals.sort((a, b) => a - b);
+  if (residuals.length === 0) return { low_mult: 0.05, high_mult: 10 };
+  const q10 = quantile(residuals, 0.1) ?? -3;
+  const q90 = quantile(residuals, 0.9) ?? 2.3;
+  return { low_mult: round3(Math.exp(q10)), high_mult: round3(Math.exp(q90)) };
 }
 
 /** DefiLlama's version-marker rule: a name ending in a release is a pool of another protocol. */
@@ -469,32 +609,101 @@ export function tokenOdds(p: SnapshotProtocol, snapshot: Snapshot, asOf: string)
   return round3(Math.min(0.99, Math.max(0.01, rate * ageFactor)));
 }
 
-/** The protocols the board ranks, strongest first, with ranks 1..n: launch candidates by implied
- * value, and protocols whose token already trades by market cap. A protocol with no value to rank
- * by — a token with no market cap in the snapshot, or a pre-token protocol that is not a launch
- * candidate — is not a board row; it is listed in the dashboard's data instead. */
+/** Gas for one transaction on a chain, in dollars: the farm's stated per-chain rates. */
+export function gasPerStep(chain: string): number {
+  const c = chain.toLowerCase();
+  if (c.includes('ethereum')) return 5;
+  if (c.includes('bsc') || c.includes('bnb')) return 0.1;
+  if (c.includes('solana')) return 0.05;
+  return 0.5;
+}
+
+/** How much capital one farm position needs, from the protocol's own TVL. */
+export function capitalFor(p: SnapshotProtocol): number {
+  if (p.tvl_usd >= 5_000_000_000) return 250;
+  if (p.tvl_usd >= 1_000_000_000) return 150;
+  if (p.tvl_usd >= 100_000_000) return 100;
+  return 50;
+}
+
+/** How long to hold, from the protocol's age: younger protocols get a longer qualifying window. */
+export function holdDaysFor(age: number | null): number {
+  if (age === null) return 30;
+  if (age < 180) return 60;
+  if (age < 365) return 45;
+  return 30;
+}
+
+/** Whether the farm position is a liquidity position (impermanent loss applies). */
+function isLiquidityPosition(p: SnapshotProtocol): boolean {
+  const c = (p.category ?? '').toLowerCase();
+  return c.includes('dex') || c.includes('yield') || c.includes('leveraged farm');
+}
+
+/**
+ * A candidate's farm economics, in dollars: what the farm costs, what it is expected to pay,
+ * and the verdict. The cost is gas for six steps on the protocol's first chain, impermanent
+ * loss or slippage on the capital, and the opportunity cost of the locked capital at 4% a
+ * year. The expected reward is the launch odds times 5% of the implied value — the stated
+ * airdrop pool — shared among the estimated farmers (TVL / $5,000 each, at least 100).
+ * Every number here is a stated assumption, printed on the Model tab.
+ */
+export function farmEconomics(
+  p: SnapshotProtocol,
+  implied: number,
+  odds: number,
+  age: number | null,
+  model: ModelConstants = MODEL,
+): { cost: number; expected: number; ev: number; verdict: 'Worth farming' | 'Marginal' | 'Skip'; capital: number; hold_days: number } {
+  const capital = capitalFor(p);
+  const hold = holdDaysFor(age);
+  const gas = 6 * gasPerStep(chainOf(p));
+  const il = capital * (isLiquidityPosition(p) ? model.il_lp_pct : model.il_other_pct);
+  const opportunity = (capital * hold * model.opportunity_rate) / 365;
+  const cost = Math.round((gas + il + opportunity) * 100) / 100;
+  const farmers = Math.max(model.min_farmers, p.tvl_usd / model.farmer_capital_usd);
+  const expected = Math.round(((odds * implied * model.airdrop_frac) / farmers) * 100) / 100;
+  const ev = Math.round((expected - cost) * 100) / 100;
+  const verdict: 'Worth farming' | 'Marginal' | 'Skip' = ev > cost ? 'Worth farming' : ev > 0 ? 'Marginal' : 'Skip';
+  return { cost, expected, ev, verdict, capital, hold_days: hold };
+}
+
+/** The protocols the board ranks, strongest first, with ranks 1..n: every one of the snapshot's
+ * protocols, by the value the radar can defend for it. A launch candidate is ranked by its
+ * implied launch value; a protocol whose token already trades is ranked by its market cap; a
+ * protocol whose token trades but the snapshot carries no market cap for, and a pre-token
+ * protocol that is not a launch candidate, are ranked by the same implied value the model
+ * gives a candidate, marked with their status and reason so no reader mistakes them for a
+ * candidate. */
 export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): BoardRow[] {
+  const fit = fitLogLog(snapshot.protocols);
   const stats = categoryStats(snapshot.protocols, model);
-  const scored = snapshot.protocols
-    .filter((p) => isRankable(p) || hasUsableMcap(p))
-    .map((p) => {
-      const s = impliedValue(p, snapshot.as_of, model, stats);
-      const live = hasUsableMcap(p);
-      const implied = live ? Math.max(1, Math.round(p.mcap_usd!)) : s.implied;
-      const low = live ? implied : s.low;
-      const high = live ? implied : s.high;
-      return {
-        p,
-        live,
-        candidate: !live,
-        reason: null as string | null,
-        implied,
-        low,
-        high,
-        odds: !live ? tokenOdds(p, snapshot, snapshot.as_of) : null,
-        s,
-      };
-    });
+  const band = conformalBand(snapshot, model);
+  const scored = snapshot.protocols.map((p) => {
+    const s = impliedValue(p, snapshot.as_of, model, fit, stats, band);
+    const live = hasUsableMcap(p);
+    const unpriced = !isPreToken(p) && !live;
+    const candidate = isRankable(p);
+    const reason = candidate || live || unpriced ? null : excludedReason(p);
+    const implied = live ? Math.max(1, Math.round(p.mcap_usd!)) : s.implied;
+    const low = live ? implied : s.low;
+    const high = live ? implied : s.high;
+    const odds = candidate ? tokenOdds(p, snapshot, snapshot.as_of) : null;
+    const econ = candidate && odds !== null ? farmEconomics(p, s.implied, odds, s.age, model) : null;
+    return {
+      p,
+      live,
+      unpriced,
+      candidate,
+      reason,
+      implied,
+      low,
+      high,
+      odds,
+      econ,
+      s,
+    };
+  });
   scored.sort((a, b) => b.implied - a.implied || (a.p.slug < b.p.slug ? -1 : a.p.slug > b.p.slug ? 1 : 0));
   return scored.map((s, i) => ({
     rank: i + 1,
@@ -508,25 +717,36 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
     listed_at: s.p.listed_at,
     gecko_id: s.p.gecko_id,
     symbol: s.p.symbol,
-    token_status: s.live ? ('live' as const) : ('pre-token' as const),
+    token_status: s.live ? ('live' as const) : s.unpriced ? ('live-unpriced' as const) : ('pre-token' as const),
     candidate: s.candidate,
-    excluded_reason: null,
+    excluded_reason: s.reason,
     token_odds: s.odds,
     age_days: s.s.age,
     implied_value_usd: s.implied,
     implied_low_usd: s.low,
     implied_high_usd: s.high,
     model: {
+      fit_intercept: fit.intercept,
+      fit_slope: fit.slope,
+      model_base_usd: Math.round(s.s.base),
       category_multiple: s.s.catMult,
-      category_q25: s.s.catQ25,
-      category_q75: s.s.catQ75,
       growth_pct: s.s.growthPct,
       growth_multiplier: round4(s.s.growthMult),
       maturity_multiplier: round4(s.s.maturityMult),
       chain_multiplier: round4(s.s.chainMult),
       age_days: s.s.age,
     },
-    farm_steps: (s.candidate ? farmSteps(s.p, s.s.age) : launchedSteps(s.p)).map(stepText),
+    farm_cost_usd: s.econ ? s.econ.cost : null,
+    farm_expected_usd: s.econ ? s.econ.expected : null,
+    farm_ev_usd: s.econ ? s.econ.ev : null,
+    farm_verdict: s.econ ? s.econ.verdict : null,
+    farm_steps: (s.candidate
+      ? farmSteps(s.p, s.s.age, s.econ!)
+      : s.live
+        ? launchedSteps(s.p)
+        : s.unpriced
+          ? unpricedSteps(s.p)
+          : excludedSteps(s.p, s.reason!)).map(stepText),
   }));
 }
 
@@ -544,22 +764,6 @@ export function stepText(step: FarmStep): string {
 /** The first chain a protocol names, or a neutral phrase. */
 function chainOf(p: SnapshotProtocol): string {
   return p.chains.length > 0 ? p.chains[0]! : 'its main chain';
-}
-
-/** How much capital one farm position needs, from the protocol's own TVL. */
-function capitalFor(p: SnapshotProtocol): number {
-  if (p.tvl_usd >= 5_000_000_000) return 250;
-  if (p.tvl_usd >= 1_000_000_000) return 150;
-  if (p.tvl_usd >= 100_000_000) return 100;
-  return 50;
-}
-
-/** How long to hold, from the protocol's age: younger protocols get a longer qualifying window. */
-function holdDaysFor(age: number | null): number {
-  if (age === null) return 30;
-  if (age < 180) return 60;
-  if (age < 365) return 45;
-  return 30;
 }
 
 /** The category's one action, in the words a farmer can follow. */
@@ -583,33 +787,39 @@ function actionFor(p: SnapshotProtocol, capital: number, chain: string): string 
 /**
  * A launch candidate's farm plan: six steps, each an action with a cost and a time. The plan is
  * derived from the protocol's own record (category, chains, TVL, age), never from a hand-written
- * list of names. Every step names what it costs in dollars and gas and how long it takes.
+ * list of names. Every step names what it costs in dollars and gas and how long it takes, and
+ * the plan's total cost is the verdict's cost: gas for six steps, impermanent loss on the
+ * capital, and the opportunity cost of locking it.
  */
-export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
+export function farmSteps(
+  p: SnapshotProtocol,
+  age: number | null,
+  econ: { cost: number; capital: number; hold_days: number },
+): FarmStep[] {
   const chain = chainOf(p);
-  const capital = capitalFor(p);
-  const hold = holdDaysFor(age);
+  const capital = econ.capital;
+  const hold = econ.hold_days;
   const action = actionFor(p, capital, chain);
-  const gas = capital >= 150 ? 8 : 4;
+  const gasStep = gasPerStep(chain);
   return [
     {
       text: `Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline on paper.`,
-      cost: 'under $3 of gas for the first transaction',
+      cost: `about $${gasStep} of gas for the first transaction on ${chain}`,
       time: '5 minutes',
     },
     {
       text: action,
-      cost: `$${capital} of capital and about $${gas} of gas`,
+      cost: `$${capital} of capital and about $${gasStep} of gas`,
       time: '15 minutes to set up',
     },
     {
       text: `Make one qualifying action each week, such as a deposit, a borrow, a swap or a vote, and never let two weeks pass with no activity.`,
-      cost: 'about $2 of gas a week',
+      cost: `about $${gasStep} of gas a week`,
       time: '10 minutes a week',
     },
     {
       text: `Hold the position for at least ${hold} days so the activity is counted in more than one snapshot.`,
-      cost: `the $${capital} stays in the position`,
+      cost: `the $${capital} stays in the position; the whole plan costs about $${econ.cost} in gas, slippage and locked capital`,
       time: `${hold} days`,
     },
     {
@@ -645,6 +855,33 @@ export function launchedSteps(p: SnapshotProtocol): FarmStep[] {
     },
     {
       text: `Compare the market cap with the protocol's TVL: at $${Math.round(mcap).toLocaleString('en-US')} on $${Math.round(p.tvl_usd).toLocaleString('en-US')} of TVL the multiple is ${mult}, and the live view shows that figure for every protocol that trades.`,
+      cost: 'nothing but the reading',
+      time: '5 minutes',
+    },
+  ];
+}
+
+/**
+ * A token protocol with no market cap in the snapshot: the token trades, but the snapshot
+ * carries no price for it — sixteen of them record a market cap of 0 or -1, which is a dead
+ * token, not a zero price — so the row is priced by the model and marked, never treated as a
+ * launch candidate.
+ */
+export function unpricedSteps(p: SnapshotProtocol): FarmStep[] {
+  const dead = p.mcap_usd !== null && p.mcap_usd <= 0;
+  return [
+    {
+      text: `${p.name} already has a token${p.symbol ? ` (${p.symbol})` : ''}, but the snapshot carries no market cap for it${dead ? ' — the recorded market cap is ' + p.mcap_usd + ', a dead token, not a price of zero' : ''}, so the board prices the row with the model's implied value and marks it live-unpriced instead of ranking it as a launch candidate.`,
+      cost: 'nothing to farm',
+      time: 'no wait',
+    },
+    {
+      text: `Do not farm this protocol for a first listing: its token already exists, so the activity would not qualify for a new launch, whatever the implied value on the row says.`,
+      cost: 'saves the capital a mistaken farm would lock',
+      time: '5 minutes to read the reason',
+    },
+    {
+      text: `If you want the token, check whether it trades anywhere first: a protocol with no market cap in the snapshot may trade on no market the snapshot covers, and the live view lists every token protocol the same way.`,
       cost: 'nothing but the reading',
       time: '5 minutes',
     },
@@ -739,12 +976,17 @@ export function radarRow(row: BoardRow): RadarRow {
     candidate: row.candidate,
     excluded_reason: row.excluded_reason,
     token_odds: row.token_odds,
+    fit_intercept: row.model.fit_intercept,
+    fit_slope: row.model.fit_slope,
+    model_base_usd: row.model.model_base_usd,
     category_multiple: row.model.category_multiple,
-    category_q25: row.model.category_q25,
-    category_q75: row.model.category_q75,
     growth_multiplier: row.model.growth_multiplier,
     maturity_multiplier: row.model.maturity_multiplier,
     chain_multiplier: row.model.chain_multiplier,
+    farm_cost_usd: row.farm_cost_usd,
+    farm_expected_usd: row.farm_expected_usd,
+    farm_ev_usd: row.farm_ev_usd,
+    farm_verdict: row.farm_verdict,
     farm_steps: row.farm_steps,
   };
 }
@@ -755,10 +997,13 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
   const live = liveRows(snapshot);
   const excluded = excludedRows(snapshot);
   const stats = categoryStats(snapshot.protocols, model);
+  const fit = fitLogLog(snapshot.protocols);
+  const band = conformalBand(snapshot, model);
   const held = heldOutTest(snapshot, model);
   const early = board.filter((r) => r.candidate && !snapshot.watchlist.includes(r.slug)).length;
   const preToken = snapshot.protocols.filter(isPreToken).length;
   const candidates = board.filter((r) => r.candidate).length;
+  const unpriced = board.filter((r) => r.token_status === 'live-unpriced').length;
   const radar: RadarData = {
     as_of: snapshot.as_of,
     source: snapshot.source,
@@ -769,6 +1014,7 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
     board_size: board.length,
     early_size: early,
     live_size: live.length,
+    live_unpriced_size: unpriced,
     pre_token_size: preToken,
     candidate_size: candidates,
     category_stats: stats.table,
@@ -776,6 +1022,9 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
     overall_q25: stats.overall.q25,
     overall_q75: stats.overall.q75,
     overall_live_count: stats.overall.live_count,
+    fit,
+    conformal_low_mult: band.low_mult,
+    conformal_high_mult: band.high_mult,
     held_out: held,
     watchlist: snapshot.watchlist,
     rows: board.map(radarRow),
