@@ -1,7 +1,7 @@
 // A working token-radar-01 entry (Node 22, standard library only).
 //
 // The program reads the sealed snapshot from /input/snapshot.json (or --input <file|dir>), scores every
-// protocol with the radar-3 model in lib/model.ts, writes the ranked board to
+// protocol with the radar-4 model in lib/model.ts, writes the ranked board to
 // /output/board.json, and copies this repository's dashboard/ and screenshots/ to /output. Last, it
 // writes /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 //
@@ -84,6 +84,7 @@ for (const name of shots) {
 writeFileSync(join(out, 'dossier.json'), buildDossier(out, { text_max_bytes: TEXT_MAX_BYTES, screenshots: SCREENSHOT_CAPS, dashboard: { max_files: 400, max_bytes: 4_194_304 } }));
 
 process.stdout.write(
-  `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${board.length} rows scored (${radar.candidate_size} candidates, ${board.length - radar.candidate_size} live priced; ${radar.live_size} token protocols and ${radar.excluded.length} not-candidates listed in the dashboard)\n` +
+  `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${board.length} rows scored (${radar.candidate_size} candidates, ${board.filter((r) => r.token_status === 'live').length} live priced, ${radar.live_unpriced_size} live-unpriced, ${radar.excluded.length} not-candidates)\n` +
+    `token radar: fit log(mcap) = ${radar.fit.intercept} + ${radar.fit.slope} x log(TVL) on ${radar.fit.live_n} live protocols; 80% conformal band x[${radar.conformal_low_mult}, ${radar.conformal_high_mult}]; held-out median log err ${radar.held_out.map((h) => h.median_abs_log_err).join(' / ')}\n` +
     `token radar: wrote ${join(out, 'board.json')}, ${join(out, 'data.js')}, ${join(out, 'dashboard')} (3 files), ${join(out, 'screenshots')} (${shots.length} images) and ${join(out, 'dossier.json')}\n`,
 );
