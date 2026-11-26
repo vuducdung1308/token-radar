@@ -43,7 +43,7 @@ h1 { margin: 0; font-size: 30px; letter-spacing: 2px; color: var(--gold); }
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 8px 14px; min-width: 96px;
 }
-.stat b { display: block; font-size: 20px; color: var(--gold); font-variant-numeric: tabular-nums; }
+.stat b { display: block; font-size: 22px; color: var(--gold); font-variant-numeric: tabular-nums; }
 .stat span { font-size: 12px; color: var(--muted); }
 .kpi {
   display: flex; gap: 8px; flex-wrap: wrap;
@@ -53,7 +53,7 @@ h1 { margin: 0; font-size: 30px; letter-spacing: 2px; color: var(--gold); }
 .kpi-item {
   font-size: 13px; color: var(--text);
   background: var(--panel2); border: 1px solid var(--line);
-  border-radius: 20px; padding: 5px 12px;
+  border-radius: 20px; padding: 6px 14px;
 }
 .kpi-item:first-child { color: var(--gold); }
 .tabs { display: flex; gap: 4px; padding: 0 28px; border-bottom: 1px solid var(--line); }
@@ -80,7 +80,7 @@ main { padding: 20px 28px 28px; max-width: 1380px; }
 .count { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
 .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
 table { width: 100%; border-collapse: collapse; background: var(--panel); }
-th, td { padding: 8px 7px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; font-size: 14px; }
+th, td { padding: 9px 9px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; font-size: 14px; }
 thead th {
   background: var(--panel2); color: var(--muted);
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px;
@@ -130,7 +130,7 @@ td .slug { display: block; font-size: 12px; color: var(--muted); }
   border-radius: 8px; padding: 10px 12px;
 }
 .factor span { display: block; font-size: 12px; color: var(--muted); }
-.factor b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+.factor b { display: block; font-size: 19px; font-variant-numeric: tabular-nums; }
 .factor code { display: block; margin-top: 2px; font-size: 12px; color: var(--cyan); word-break: break-word; }
 .detail h3 { margin: 14px 0 8px; font-size: 16px; color: var(--gold); }
 .detail ol { margin: 0; padding-left: 22px; }
