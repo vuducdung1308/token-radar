@@ -18,26 +18,43 @@
   <div class="stats" id="stats"></div>
 </header>
 
+<section class="kpis" id="kpiBoxes" aria-label="Key figures"></section>
+
+<section class="ledger" id="ledger" aria-label="Protocol accounting"></section>
+
 <section class="kpi" id="kpi" aria-label="Integrity checks"></section>
+
+<section class="evidence" id="evidence" aria-label="Out-of-sample evidence"></section>
 
 <nav class="tabs">
   <button class="tab active" data-tab="board">Board</button>
   <button class="tab" data-tab="farm">Farm</button>
-  <button class="tab" data-tab="live">Live tokens</button>
-  <button class="tab" data-tab="excluded">Not candidates</button>
+  <button class="tab" data-tab="live">Already trades</button>
+  <button class="tab" data-tab="excluded">Set aside</button>
   <button class="tab" data-tab="model">How the model works</button>
 </nav>
 
 <main>
   <section id="tab-board" class="panel">
+    <div class="controls scenario">
+      <label>Deposit <select id="deposit"><option value="1000">$1,000</option><option value="10000" selected>$10,000</option><option value="25000">$25,000</option></select></label>
+      <label>Drop share <select id="dropShare"><option value="0.035">3.5%</option><option value="0.07" selected>7%</option><option value="0.14">14%</option></select></label>
+      <label>Weeks held <select id="weeks"><option value="12" selected>12 wk</option><option value="26">26 wk</option></select></label>
+      <span class="scenario-note">The farm verdicts re-price in place from the row's own figures.</span>
+    </div>
     <div class="controls">
       <input id="q" type="search" placeholder="Search a protocol…" aria-label="Search a protocol">
-      <select id="status" aria-label="Filter by status">
-        <option value="">All rows</option>
-        <option value="candidate" selected>Launch candidates</option>
-        <option value="live">Live tokens</option>
-        <option value="live-unpriced">Live, no market cap</option>
-        <option value="excluded">Not candidates</option>
+      <select id="verdict" aria-label="Filter by farm verdict">
+        <option value="">All 198</option>
+        <option value="FARM">Farm</option>
+        <option value="MARGINAL">Marginal</option>
+        <option value="SKIP">Skip</option>
+      </select>
+      <select id="group" aria-label="Filter by group">
+        <option value="">All groups</option>
+        <option value="watchlist">Watchlist</option>
+        <option value="offlist">Off-list, above the floor</option>
+        <option value="early">Early, below the floor</option>
       </select>
       <select id="cat" aria-label="Filter by category"><option value="">All categories</option></select>
       <select id="chain" aria-label="Filter by chain"><option value="">All chains</option></select>
@@ -48,8 +65,7 @@
         <option value="growth">Sort: 7-day growth</option>
         <option value="age">Sort: age</option>
         <option value="odds">Sort: launch odds</option>
-        <option value="ev">Sort: farm EV</option>
-        <option value="verdict">Sort: farm verdict</option>
+        <option value="net">Sort: farm net / hour</option>
         <option value="name">Sort: name A–Z</option>
       </select>
     </div>
@@ -57,24 +73,25 @@
     <div class="tablewrap">
       <table id="board">
         <thead><tr>
-          <th>#</th><th>Protocol</th><th>Status</th><th>Category</th><th>Chains</th>
-          <th class="num">TVL</th><th class="num">7d</th><th class="num">Age</th><th class="num">Odds</th><th class="num">Farm EV</th><th>Verdict</th><th class="num">Value</th>
+          <th>#</th><th>Protocol</th>
+          <th class="num">TVL</th><th class="num">7d</th><th class="num">No-token age</th><th class="num">Token odds</th><th class="num">If it launches</th>
+          <th class="num">Implied value · P25–P75</th><th>Verdict · net of fees</th><th class="num">Net / hour</th>
         </tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="hint">Click any row for its model breakdown and farm plan. “Value” is the implied launch value for a candidate, the market cap for a token that already trades, and the model's implied value for a live token with no market cap in the snapshot or a protocol that is not a launch candidate. “Farm EV” is the expected value of farming the candidate, after the plan's cost — only candidates have one.</p>
+    <p class="hint">Click any row for its model breakdown and farm plan. “Implied value” is the launch value times the launch odds: what a launch would be worth, weighted by how often the protocol's peers record a token within two years. “Net / hour” is the farm's net after fees and the capital charge, per hour of hands-on work, at the scenario above.</p>
     <article id="detail" class="detail" hidden></article>
   </section>
 
   <section id="tab-farm" class="panel" hidden>
-    <p class="lede">Farm opportunities ranked by expected value: the candidates whose costed farm plan pays for itself, best first. Only launch candidates appear here — a protocol whose token already trades has nothing left to farm for a first listing. Click a row for its model breakdown and farm plan.</p>
+    <p class="lede">Farm opportunities ranked by net per hour: the candidates whose costed farm plan pays for itself, best first. The verdicts follow the scenario on the Board tab — deposit, drop share and weeks held — and re-price when it changes.</p>
     <p class="count" id="farmCount"></p>
     <div class="tablewrap">
       <table>
         <thead><tr>
           <th>#</th><th>Protocol</th><th>Category</th>
-          <th class="num">TVL</th><th class="num">Odds</th><th class="num">Value</th><th class="num">Cost</th><th class="num">Expected</th><th class="num">EV</th><th>Verdict</th>
+          <th class="num">TVL</th><th class="num">Odds</th><th class="num">Value</th><th class="num">Expected drop</th><th class="num">Net</th><th class="num">Net / hour</th><th>Verdict</th>
         </tr></thead>
         <tbody id="farmRows"></tbody>
       </table>
@@ -82,12 +99,12 @@
   </section>
 
   <section id="tab-live" class="panel" hidden>
-    <p class="lede">These protocols already have a token that trades, so the board shows the market's own value for them — never a model's guess. They are the comparison set the category multiples are computed from. Protocols whose token trades but the snapshot carries no market cap for are listed last with no market cap.</p>
+    <p class="lede">The 92 traded tokens the value curve is fitted on. They already trade, so the board shows the market's own value for them — never a model's guess. “Model” is the curve's price of each one, fitted on the other 91; “Miss” is how far that blind price lands from the real market cap.</p>
     <div class="tablewrap">
       <table>
         <thead><tr>
           <th>Protocol</th><th>Category</th><th>Chains</th>
-          <th class="num">TVL</th><th class="num">Market cap</th><th class="num">mcap / TVL</th><th class="num">7d</th>
+          <th class="num">TVL</th><th class="num">Market cap</th><th class="num">mcap / TVL</th><th class="num">Model</th><th class="num">Miss</th><th class="num">7d</th>
         </tr></thead>
         <tbody id="liveRows"></tbody>
       </table>
@@ -95,7 +112,7 @@
   </section>
 
   <section id="tab-excluded" class="panel" hidden>
-    <p class="lede">Pre-token protocols that are not launch candidates, with the reason each one is out. The radar keeps them listed so the universe is complete — a verdict, not a silent omission.</p>
+    <p class="lede">Pre-token protocols that are not launch candidates, with the reason each one is out. The radar keeps them listed so the universe is complete — a verdict, not a silent omission. Together with the board, the priced comps and the recorded tokens, they account for all 758 protocols in the snapshot.</p>
     <div class="tablewrap">
       <table>
         <thead><tr>
@@ -108,41 +125,40 @@
 
   <section id="tab-model" class="panel" hidden>
     <h2>How the model works</h2>
-    <p class="lede">One rule scores every protocol: its category's median market-cap-to-TVL ratio. Nothing is hardcoded by name: the multiples are computed from this snapshot's own live-token protocols at run time.</p>
+    <p class="lede">One rule scores every candidate: the fitted curve's launch value, times the launch odds from the peers' record. Nothing is hardcoded by name: the curve and the odds are fitted from this snapshot's own protocols at run time.</p>
     <div class="formula">
-      <code>implied = TVL × category median mcap/TVL × growth × maturity × chains</code>
+      <code>implied value = launch value × launch odds</code>
       <p id="fitLine" class="lede"></p>
       <ul>
-        <li><b>Category multiple</b> — each category's median market-cap-to-TVL ratio over its live-token protocols (categories with fewer than 5 live protocols fall back to the overall median of 0.214). This is the ranking rule: a $2.75B protocol prices near $510M. It is the rule of radar-3, the highest-scoring entry so far (0.9107).</li>
-        <li><b>Fitted line</b> — ordinary least squares of log(market cap) on log(TVL) over the live-token protocols with a usable market cap (16 dead tokens with a recorded market cap of 0 or −1 are left out of the fit). The slope is 0.52 on this snapshot, so market cap grows with the square root of TVL: the same $2.75B protocol prices near $78M. The line is the reference the multiple is checked against, not the ranking rule — it predicts live market caps more closely on the blind test below, and the board still ranks by the multiple because the entry that did scored highest with the judge.</li>
-        <li><b>Growth</b> — 1 + clamp(7-day TVL change, −60%, +120%) × 0.6.</li>
-        <li><b>Maturity</b> — 0.6 + min(age, 1095 days) / 1095 × 0.4. Older with no token yet counts for more; unknown age counts as 365 days.</li>
-        <li><b>Chains</b> — 1 + 0.01 per extra chain, up to 10 chains.</li>
-        <li><b>Uncertainty range</b> — the category's own quartiles: the 25th and 75th percentile of its market-cap-to-TVL ratios, applied to the same TVL and terms. The range is wide because market-cap-to-TVL varies a lot inside a category; the dashboard shows it on every row's detail view.</li>
-        <li><b>Launch odds</b> — the share of protocols in the same category that already have a token, smoothed, discounted by age. A base rate from the peers' record, not a prediction of whether or when a token is issued.</li>
-        <li><b>Farm verdict</b> — the plan's cost against its expected reward. Cost is gas for six steps on the protocol's first chain (Ethereum $5, BSC $0.10, Solana $0.05, other chains $0.50 a step), impermanent loss or slippage on the capital (2% for liquidity positions, 0.5% otherwise), and the opportunity cost of locking the capital at 4% a year. Expected reward is the launch odds times 5% of the implied value — the stated airdrop pool — shared among the estimated farmers (TVL / $5,000 each, at least 100). “Worth farming” clears the cost, “Marginal” is positive but below it, “Skip” is negative. Every assumption is stated here so the verdict can be re-derived from the row's own figures.</li>
+        <li><b>Launch value</b> — the power curve fitted on the 92 traded tokens whose market cap the snapshot can price and that are not themselves a product of another token: log(market cap) = intercept + slope × log(TVL). On this snapshot the slope is 0.39, so market cap grows more slowly than TVL: a $100M protocol prices near $12.9M and a $2.75B protocol near $47.6M. The old rule, each category's median market-cap-to-TVL ratio, prices the same $2.75B protocol near $510M; the blind test below shows why that overprices it, and the multiples table at the bottom of this tab lets a reader see what the old rule would have said for every category.</li>
+        <li><b>Launch odds</b> — the forward two-year hazard from the peers' record. A logistic curve fitted on the 442 peers (every protocol that is not itself a product) gives F(age), the share of peers that record a token by a given age. The odds for a candidate of age a are [F(a + 2 years) − F(a)] / [1 − F(a)]: the share of the peers that reach age a with no token and record one in the next two years. Young protocols get high odds and old ones low odds, because the peers' record says so — the table below shows the fitted curve against the raw age buckets.</li>
+        <li><b>Uncertainty range</b> — the curve's own held-out error: the 25th and 75th percentile (and the 10th and 90th) of the leave-one-out log-residuals, applied to the row's implied value. The range-honesty table checks how often a real market cap lands inside the printed range.</li>
+        <li><b>Value terms</b> — added in order and kept only when BOTH blind tests improve: the leave-one-out test (each of the 92 traded tokens priced from a fit on the other 91) and the walk-forward test (the older half of the traded tokens, listed before the median listing date, prices the newer half). The size curve beats the flat multiple on both. The category premium, 7-day growth, years listed and the carry term do not, and are tested, not kept. The chain count improves both by a hair and is kept. The full ablation table is on the board page and below.</li>
+        <li><b>Farm verdict</b> — the plan's economics at a stated scenario: a $10,000 deposit, a 7% drop share, 12 weeks held. The expected drop is the implied value times the drop share times the farmer's share of the pool, deposit / (TVL + deposit). The cost is gas for every on-chain step at the chain's stated rate (Ethereum $5, BSC $0.10, Solana $0.05, other chains $0.50 a step), plus the capital charge of locking the deposit at 2% a year. The verdict compares the net with a 4% T-bill on the same money and with $25 an hour of hands-on work: FARM when the net beats the T-bill and clears $25 an hour, MARGINAL when it is positive but below that bar, SKIP when it is not. The scenario controls on the Board tab re-price every verdict in place.</li>
+        <li><b>Integrity seal</b> — the board's seal is a checksum of its ranks, slugs and implied values, computed when the board is written and recomputed by this page from the same data. If the two disagree, the strip at the top says so.</li>
       </ul>
     </div>
     <h3>Held-out test — the model is tested, not just asserted</h3>
-    <p class="lede">The live protocols are split in two deterministic ways and each method is fitted on one half and asked to predict the other half's market caps. The ranking rule is the category multiple; the fitted log-log line is scored on the same splits, so the rule's cost against the better predictor is measured, not hidden.</p>
+    <p class="lede">A term is kept only when both blind tests improve. The flat multiple is the baseline; the size curve is the base model; each further term is added to the terms kept so far.</p>
     <div class="tablewrap"><table>
-      <thead><tr><th>Split</th><th class="num">Train</th><th class="num">Test</th><th class="num">Category model |log error|</th><th class="num">Category miss</th><th class="num">Fitted line |log error|</th><th class="num">Fitted miss</th></tr></thead>
+      <thead><tr><th>Term, added in order</th><th class="num">Leave-one-out miss</th><th class="num">Walk-forward miss</th><th>Kept?</th></tr></thead>
       <tbody id="heldRows"></tbody>
     </table></div>
-    <p class="lede">The miss is still large — around 90% at the median — because market-cap-to-TVL varies by more than a hundredfold inside a single category, so no function of TVL can price a live token closely. The category model is the worse predictor of the two: split A 1.66 against the fitted line's 1.14, split B 1.69 against 1.39. The board ranks by it anyway, because the entry that did (radar-3, 0.9107) scored highest with the judge of the three entries so far (0.9014 and 0.8828 for the fitted-line and consensus boards). Growth, maturity and chains are kept because each one was tested on both splits and only the terms that helped both stayed; the category-intercept and multi-variable variants were tried and dropped for the same reason.</p>
+    <p class="lede" id="oddsNote"></p>
     <h3>Category multiples, computed from this snapshot</h3>
+    <p class="lede">The old ranking rule, kept as a reference: each category's median market-cap-to-TVL ratio over its live-token protocols. The board no longer ranks by it — the fitted curve does — but the table shows what it would have said.</p>
     <div class="tablewrap"><table>
       <thead><tr><th>Category</th><th class="num">Multiple</th><th class="num">25th pct</th><th class="num">75th pct</th><th class="num">Live protocols</th></tr></thead>
       <tbody id="multRows"></tbody>
     </table></div>
     <h3>What “pre-token” means</h3>
-    <p class="lede">A protocol is listed as pre-token when its DefiLlama record carries no market cap, no CoinGecko id and no symbol. That is what the record says — never proof it has no token. A protocol on the list may still have a token its record does not carry. The board never predicts whether or when a token is issued; the implied value is this entry's own claim about what a launch would be worth if the protocol's record stayed as it is.</p>
-    <p class="lede">The board ranks all 758 protocols, not only the candidates: a protocol whose token already trades is ranked by its market cap, a protocol whose token trades but the snapshot carries no market cap for is ranked by the model's implied value and marked live-unpriced, and a pre-token protocol that is not a launch candidate is ranked the same way and marked with the reason. The board leaves out wrapped, staked and bridged products of tokens that already trade as candidates — the same exclusion the snapshot's own watchlist rule uses (Bridge, Liquid Staking and related categories, names starting with an exchange's name, names carrying “wrapped”, “staked” or “staking”, and versioned pools such as “V2”). A launch candidate has to be a protocol of its own, not a wrapper around someone else's token. Those rows are listed on the Not candidates tab with the reason.</p>
+    <p class="lede">A protocol is listed as pre-token when its DefiLlama record carries no market cap, no CoinGecko id and no symbol. That is what the record says — never proof it has no token. A protocol on the list may still have a token its record does not carry. The board never predicts whether or when a token is issued; the implied value is this entry's own claim about what a launch would be worth if the protocol's record stayed as it is, weighted by how often its peers record one.</p>
+    <p class="lede">The board ranks the 198 launch candidates, not all 758 protocols: a protocol whose token already trades is a comparison, not a candidate, and a wrapped, staked, bridged, exchange or versioned product is set aside with its reason. The ledger at the top of the page accounts for every one of the 758 protocols in exactly one group.</p>
   </section>
 </main>
 
 <footer>
-  <p>Snapshot: DefiLlama public API, fetched <span id="asof"></span> · <span id="src"></span> · Watchlist floor $50,000,000 TVL · Model radar-6</p>
+  <p>Snapshot: DefiLlama public API, fetched <span id="asof"></span> · <span id="src"></span> · Watchlist floor $50,000,000 TVL · Model radar-7</p>
   <p class="warn">Not financial advice. Farming a protocol costs gas and locks capital; a token may never launch, and an airdrop may never come.</p>
 </footer>
 
