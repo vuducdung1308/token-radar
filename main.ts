@@ -1,7 +1,7 @@
 // A working token-radar-01 entry (Node 22, standard library only).
 //
-// The program reads the sealed snapshot from /input/snapshot.json (or --input <file|dir>), scores every
-// protocol with the radar-6 model in lib/model.ts, writes the ranked board to
+// The program reads the sealed snapshot from /input/snapshot.json (or --input <file|dir>), scores
+// every protocol with the radar-7 model in lib/model.ts, writes the ranked board to
 // /output/board.json, and copies this repository's dashboard/ and screenshots/ to /output. Last, it
 // writes /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 //
@@ -84,7 +84,9 @@ for (const name of shots) {
 writeFileSync(join(out, 'dossier.json'), buildDossier(out, { text_max_bytes: TEXT_MAX_BYTES, screenshots: SCREENSHOT_CAPS, dashboard: { max_files: 400, max_bytes: 4_194_304 } }));
 
 process.stdout.write(
-  `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${board.length} rows scored (${radar.candidate_size} candidates, ${board.filter((r) => r.token_status === 'live').length} live priced, ${radar.live_unpriced_size} live-unpriced, ${radar.excluded.length} not-candidates)\n` +
-    `token radar: category multiples rank the board (overall ${radar.overall_multiple}); fitted line log(mcap) = ${radar.fit.intercept} + ${radar.fit.slope} x log(TVL) on ${radar.fit.live_n} live protocols is the reference; held-out median log err (category model) ${radar.held_out.map((h) => h.median_abs_log_err).join(' / ')}, fitted line ${radar.held_out.map((h) => h.fitted_median_abs_log_err).join(' / ')}\n` +
+  `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${board.length} rows scored (${radar.candidate_size} candidates; ledger ${radar.ledger.map((g) => `${g.key} ${g.count}`).join(', ')})\n` +
+    `token radar: launch value = fitted curve on ${radar.value_evidence.comps_n} traded comps log(mcap) = ${radar.fit.intercept} + ${radar.fit.slope} x log(TVL); size curve blind miss LOO x${radar.value_evidence.base_loo} / walk-forward x${radar.value_evidence.base_wf} (flat multiple x${radar.value_evidence.flat_loo} / x${radar.value_evidence.flat_wf}); kept terms: ${radar.value_evidence.kept_keys.join(', ') || 'size curve only'}\n` +
+    `token radar: launch odds = forward 2y hazard on ${radar.odds_evidence.peers_n} peers; ten-fold Brier ${radar.odds_evidence.age_brier_10fold} vs base ${radar.odds_evidence.base_brier} (full model ${radar.odds_evidence.full_brier_10fold}); walk-forward accuracy ${radar.odds_evidence.wf_accuracy} vs base ${radar.odds_evidence.wf_base_accuracy}\n` +
+    `token radar: farm verdicts ${board.filter((r) => r.farm_verdict === 'FARM').length} FARM / ${board.filter((r) => r.farm_verdict === 'MARGINAL').length} MARGINAL / ${board.filter((r) => r.farm_verdict === 'SKIP').length} SKIP; seal ${radar.seal}\n` +
     `token radar: wrote ${join(out, 'board.json')}, ${join(out, 'data.js')}, ${join(out, 'dashboard')} (3 files), ${join(out, 'screenshots')} (${shots.length} images) and ${join(out, 'dossier.json')}\n`,
 );
